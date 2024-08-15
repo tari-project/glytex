@@ -1,62 +1,68 @@
-use crate::config_file::ConfigFile;
-use crate::node_client::NodeClient;
-use crate::tari_coinbase::generate_coinbase;
-use anyhow::anyhow;
-use anyhow::Context as AnyContext;
+use std::{cmp, convert::TryInto, env::current_dir, iter, num, path::PathBuf, sync::Arc, thread, time::Instant};
+
+use anyhow::{anyhow, Context as AnyContext};
 use clap::Parser;
-use cust::device::DeviceAttribute;
-use cust::memory::AsyncCopyDestination;
-use cust::memory::DeviceCopy;
-use cust::module::ModuleJitOption;
-use cust::module::ModuleJitOption::DetermineTargetFromContext;
-use cust::prelude::Module;
-use cust::prelude::*;
-use minotari_app_grpc::tari_rpc::BlockHeader as grpc_header;
-use minotari_app_grpc::tari_rpc::TransactionOutput as GrpcTransactionOutput;
-use num_format::Locale;
-use num_format::ToFormattedString;
-use sha3::digest::crypto_common::rand_core::block;
-use sha3::Digest;
-use sha3::Sha3_256;
-use std::cmp;
-use std::convert::TryInto;
-use std::env::current_dir;
-use std::iter;
-use std::num;
-use std::path::PathBuf;
-use std::sync::Arc;
-use std::thread;
-use std::time::Instant;
+#[cfg(feature = "nvidia")]
+use cust::{
+    device::DeviceAttribute,
+    memory::{AsyncCopyDestination, DeviceCopy},
+    module::{ModuleJitOption, ModuleJitOption::DetermineTargetFromContext},
+    prelude::{Module, *},
+};
+use minotari_app_grpc::tari_rpc::{BlockHeader as grpc_header, TransactionOutput as GrpcTransactionOutput};
+use num_format::{Locale, ToFormattedString};
+use sha3::{digest::crypto_common::rand_core::block, Digest, Sha3_256};
+use std::str::FromStr;
 use tari_common::configuration::Network;
-use tari_common_types::tari_address::TariAddress;
-use tari_common_types::types::FixedHash;
-use tari_core::blocks::BlockHeader;
-use tari_core::consensus::ConsensusManager;
-use tari_core::proof_of_work::sha3x_difficulty;
-use tari_core::proof_of_work::Difficulty;
-use tari_core::transactions::key_manager::create_memory_db_key_manager;
-use tari_core::transactions::tari_amount::MicroMinotari;
-use tari_core::transactions::transaction_components::RangeProofType;
-use tokio::runtime::Handle;
-use tokio::runtime::Runtime;
-use tokio::sync::RwLock;
-use tokio::task;
-use tokio::task::JoinSet;
-use tokio::time::sleep;
-use tokio::try_join;
+use tari_common_types::{tari_address::TariAddress, types::FixedHash};
+use tari_core::{
+    blocks::BlockHeader,
+    consensus::ConsensusManager,
+    proof_of_work::{sha3x_difficulty, Difficulty},
+    transactions::{
+        key_manager::create_memory_db_key_manager, tari_amount::MicroMinotari, transaction_components::RangeProofType,
+    },
+};
+use tari_utilities::epoch_time::EpochTime;
+use tokio::{
+    runtime::{Handle, Runtime},
+    sync::RwLock,
+    task,
+    task::JoinSet,
+    time::sleep,
+    try_join,
+};
+
+#[cfg(feature = "opencl3")]
+use crate::opencl_engine::OpenClEngine;
+use crate::{
+    config_file::ConfigFile, engine_impl::EngineImpl, function_impl::FunctionImpl, gpu_engine::GpuEngine,
+    node_client::NodeClient, tari_coinbase::generate_coinbase,
+};
 
 mod config_file;
+mod context_impl;
+#[cfg(feature = "nvidia")]
+mod cuda_engine;
+#[cfg(feature = "nvidia")]
+use crate::cuda_engine::CudaEngine;
+
+mod engine_impl;
+mod function_impl;
+mod gpu_engine;
 mod node_client;
+#[cfg(feature = "opencl3")]
+mod opencl_engine;
 mod tari_coinbase;
 
 #[tokio::main]
 async fn main() {
     match main_inner().await {
-        Ok(()) => {}
+        Ok(()) => {},
         Err(err) => {
             eprintln!("Error: {:#?}", err);
             std::process::exit(1);
-        }
+        },
     }
 }
 
@@ -82,23 +88,28 @@ async fn main_inner() -> Result<(), anyhow::Error> {
         Err(err) => {
             eprintln!("Error loading config file: {}. Creating new one", err);
             let default = ConfigFile::default();
+            default.save("config.json").expect("Could not save default config");
             default
-                .save("config.json")
-                .expect("Could not save default config");
-            default
-        }
+        },
     };
 
     let submit = true;
 
-    cust::init(CudaFlags::empty())?;
+    #[cfg(feature = "nvidia")]
+    let mut gpu_engine = GpuEngine::new(CudaEngine::new());
 
-    let num_devices = Device::num_devices()?;
+    #[cfg(feature = "opencl3")]
+    let mut gpu_engine = GpuEngine::new(OpenClEngine::new());
+
+    gpu_engine.init();
+
+    let num_devices = gpu_engine.num_devices()?;
     let mut threads = vec![];
     for i in 0..num_devices {
         let c = config.clone();
+        let gpu = gpu_engine.clone();
         threads.push(thread::spawn(move || {
-            run_thread(num_devices as u64, i as u64, c, benchmark)
+            run_thread(gpu, num_devices as u64, i as u32, c, benchmark)
         }));
     }
 
@@ -109,9 +120,10 @@ async fn main_inner() -> Result<(), anyhow::Error> {
     Ok(())
 }
 
-fn run_thread(
+fn run_thread<T: EngineImpl>(
+    gpu_engine: GpuEngine<T>,
     num_threads: u64,
-    thread_index: u64,
+    thread_index: u32,
     config: ConfigFile,
     benchmark: bool,
 ) -> Result<(), anyhow::Error> {
@@ -123,27 +135,20 @@ fn run_thread(
     })?));
     let mut rounds = 0;
 
-    let context = Context::new(Device::get_device(thread_index as u32)?)?;
-    context.set_flags(ContextFlags::SCHED_YIELD)?;
-    let module = Module::from_ptx(
-        include_str!("../cuda/keccak.ptx"),
-        &[ModuleJitOption::GenerateLineInfo(true)],
-    )
-    .context("module bad")?;
+    let context = gpu_engine.create_context(thread_index)?;
 
-    let func = module
-        .get_function("keccakKernel")
-        .context("module getfunc")?;
-    let (grid_size, block_size) = func
-        .suggested_launch_configuration(0, 0.into())
+    let gpu_function = gpu_engine.get_main_function(&context)?;
+
+    let (grid_size, block_size) = gpu_function
+        .suggested_launch_configuration()
         .context("get suggest config")?;
     // let (grid_size, block_size) = (23, 50);
 
     let output = vec![0u64; 5];
-    let mut output_buf = output.as_slice().as_dbuf()?;
+    // let mut output_buf = output.as_slice().as_dbuf()?;
 
     let mut data = vec![0u64; 6];
-    let mut data_buf = data.as_slice().as_dbuf()?;
+    // let mut data_buf = data.as_slice().as_dbuf()?;
 
     loop {
         rounds += 1;
@@ -152,9 +157,8 @@ fn run_thread(
         }
         let clone_node_client = node_client.clone();
         let clone_config = config.clone();
-        let (target_difficulty, block, mut header, mining_hash) = runtime.block_on(async move {
-            get_template(clone_config, clone_node_client, rounds, benchmark).await
-        })?;
+        let (target_difficulty, block, mut header, mining_hash) =
+            runtime.block_on(async move { get_template(clone_config, clone_node_client, rounds, benchmark).await })?;
 
         let hash64 = copy_u8_to_u64(mining_hash.to_vec());
         data[0] = 0;
@@ -163,14 +167,10 @@ fn run_thread(
         data[3] = hash64[2];
         data[4] = hash64[3];
         data[5] = u64::from_le_bytes([1, 0x06, 0, 0, 0, 0, 0, 0]);
-        data_buf
-            .copy_from(&data)
-            .expect("Could not copy data to buffer");
-        output_buf
-            .copy_from(&output)
-            .expect("Could not copy output to buffer");
+        // data_buf.copy_from(&data).expect("Could not copy data to buffer");
+        // output_buf.copy_from(&output).expect("Could not copy output to buffer");
 
-        let mut nonce_start = (u64::MAX / num_threads) * thread_index;
+        let mut nonce_start = (u64::MAX / num_threads) * thread_index as u64;
         let mut last_hash_rate = 0;
         let elapsed = Instant::now();
         let mut max_diff = 0;
@@ -179,19 +179,23 @@ fn run_thread(
             if elapsed.elapsed().as_secs() > config.template_refresh_secs {
                 break;
             }
-            let (nonce, hashes, diff) = mine(
-                mining_hash,
-                header.pow.to_bytes(),
+            let num_iterations = 16;
+            let (nonce, hashes, diff) = gpu_engine.mine(
+                &gpu_function,
+                &context,
+                &data,
                 (u64::MAX / (target_difficulty)).to_le(),
                 nonce_start,
-                &context,
-                &module,
-                4,
-                &func,
+                num_iterations,
                 block_size,
-                grid_size,
-                data_buf.as_device_ptr(),
-                &output_buf,
+                grid_size, /* &context,
+                            * &module,
+                            * 4,
+                            * &func,
+                            * block_size,
+                            * grid_size,
+                            * data_buf.as_device_ptr(),
+                            * &output_buf, */
             )?;
             if let Some(ref n) = nonce {
                 header.nonce = *n;
@@ -209,11 +213,9 @@ fn run_thread(
                         grid_size,
                         max_diff.to_formatted_string(&Locale::en),
                         target_difficulty.to_formatted_string(&Locale::en),
-                        (nonce_start / elapsed.elapsed().as_secs())
-                            .to_formatted_string(&Locale::en)
+                        (nonce_start / elapsed.elapsed().as_secs()).to_formatted_string(&Locale::en)
                     );
                 }
-                last_hash_rate = nonce_start / elapsed.elapsed().as_secs();
             }
             if nonce.is_some() {
                 header.nonce = nonce.unwrap();
@@ -221,15 +223,13 @@ fn run_thread(
                 let mut mined_block = block.clone();
                 mined_block.header = Some(grpc_header::from(header));
                 let clone_client = node_client.clone();
-                match runtime
-                    .block_on(async { clone_client.write().await.submit_block(mined_block).await })
-                {
+                match runtime.block_on(async { clone_client.write().await.submit_block(mined_block).await }) {
                     Ok(_) => {
                         println!("Block submitted");
-                    }
+                    },
                     Err(e) => {
                         println!("Error submitting block: {:?}", e);
-                    }
+                    },
                 }
                 break;
             }
@@ -243,15 +243,7 @@ async fn get_template(
     node_client: Arc<RwLock<node_client::Client>>,
     round: u32,
     benchmark: bool,
-) -> Result<
-    (
-        u64,
-        minotari_app_grpc::tari_rpc::Block,
-        BlockHeader,
-        FixedHash,
-    ),
-    anyhow::Error,
-> {
+) -> Result<(u64, minotari_app_grpc::tari_rpc::Block, BlockHeader, FixedHash), anyhow::Error> {
     if benchmark {
         return Ok((
             u64::MAX,
@@ -261,11 +253,13 @@ async fn get_template(
         ));
     }
     let address = if round % 99 == 0 {
-        TariAddress::from_hex("8c98d40f216589d8b385015222b95fb5327fee334352c7c30370101b0c6d124fd6")?
+        TariAddress::from_str(
+            "f2CWXg4GRNXweuDknxLATNjeX8GyJyQp9GbVG8f81q63hC7eLJ4ZR8cDd9HBcVTjzoHYUtzWZFM3yrZ68btM2wiY7sj",
+        )?
     } else {
-        TariAddress::from_hex(config.tari_address.as_str())?
+        TariAddress::from_str(config.tari_address.as_str())?
     };
-    let key_manager = create_memory_db_key_manager();
+    let key_manager = create_memory_db_key_manager()?;
     let consensus_manager = ConsensusManager::builder(Network::NextNet)
         .build()
         .expect("Could not build consensus manager");
@@ -290,8 +284,7 @@ async fn get_template(
     )
     .await?;
     let body = block_template.body.as_mut().expect("no block body");
-    let grpc_output =
-        GrpcTransactionOutput::try_from(coinbase_output.clone()).map_err(|s| anyhow!(s))?;
+    let grpc_output = GrpcTransactionOutput::try_from(coinbase_output.clone()).map_err(|s| anyhow!(s))?;
     body.outputs.push(grpc_output);
     body.kernels.push(coinbase_kernel.into());
     let target_difficulty = miner_data.target_difficulty;
@@ -303,6 +296,8 @@ async fn get_template(
         .unwrap()
         .try_into()
         .map_err(|s: String| anyhow!(s))?;
+    // header.timestamp = EpochTime::now();
+
     let mining_hash = header.mining_hash().clone();
     Ok((target_difficulty, block, header, mining_hash))
 }
@@ -337,87 +332,4 @@ fn copy_u64_to_u8(input: Vec<u64>) -> Vec<u8> {
     }
 
     output
-}
-
-fn mine<T: DeviceCopy>(
-    mining_hash: FixedHash,
-    pow: Vec<u8>,
-    target: u64,
-    nonce_start: u64,
-    context: &Context,
-    module: &Module,
-    num_iterations: u32,
-    func: &Function<'_>,
-    block_size: u32,
-    grid_size: u32,
-    data_ptr: DevicePointer<T>,
-    output_buf: &DeviceBuffer<u64>,
-) -> Result<(Option<u64>, u32, u64), anyhow::Error> {
-    let num_streams = 1;
-    let mut streams = Vec::with_capacity(num_streams);
-    let mut max = None;
-
-    let output = vec![0u64; 5];
-
-    let timer = Instant::now();
-    for st in 0..num_streams {
-        let stream = Stream::new(StreamFlags::NON_BLOCKING, None)?;
-
-        streams.push(stream);
-    }
-
-    for st in 0..num_streams {
-        let stream = &streams[st];
-        unsafe {
-            launch!(
-                func<<<grid_size, block_size, 0, stream>>>(
-                data_ptr,
-                     nonce_start,
-                     target,
-                     num_iterations,
-                     output_buf.as_device_ptr(),
-
-                )
-            )?;
-        }
-    }
-
-    for st in 0..num_streams {
-        let mut out1 = vec![0u64; 5];
-
-        unsafe {
-            output_buf.copy_to(&mut out1)?;
-        }
-        //stream.synchronize()?;
-
-        if out1[0] > 0 {
-            return Ok((
-                Some((&out1[0]).clone()),
-                grid_size * block_size * num_iterations,
-                0,
-            ));
-        }
-    }
-
-    match max {
-        Some((i, diff)) => {
-            if diff > target {
-                return Ok((
-                    Some(i),
-                    grid_size * block_size * num_iterations * num_streams as u32,
-                    diff,
-                ));
-            }
-            return Ok((
-                None,
-                grid_size * block_size * num_iterations * num_streams as u32,
-                diff,
-            ));
-        }
-        None => Ok((
-            None,
-            grid_size * block_size * num_iterations * num_streams as u32,
-            0,
-        )),
-    }
 }
