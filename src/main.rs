@@ -64,6 +64,12 @@ struct Cli {
     config: Option<PathBuf>,
     #[arg(short, long)]
     benchmark: bool,
+    #[arg(short = 'a', long)]
+    tari_address: Option<String>,
+    #[arg(short = 'u', long)]
+    tari_node_url: Option<String>,
+    #[arg(long)]
+    p2pool_enabled: bool,
 }
 
 async fn main_inner() -> Result<(), anyhow::Error> {
@@ -71,7 +77,7 @@ async fn main_inner() -> Result<(), anyhow::Error> {
 
     let benchmark = cli.benchmark;
 
-    let config = match ConfigFile::load(cli.config.unwrap_or_else(|| {
+    let mut config = match ConfigFile::load(cli.config.unwrap_or_else(|| {
         let mut path = current_dir().expect("no current directory");
         path.push("config.json");
         path
@@ -84,6 +90,16 @@ async fn main_inner() -> Result<(), anyhow::Error> {
             default
         },
     };
+
+    if let Some(ref addr) = cli.tari_address {
+        config.tari_address = addr.clone();
+    }
+    if let Some(ref url) = cli.tari_node_url {
+        config.tari_node_url = url.clone();
+    }
+    if cli.p2pool_enabled {
+        config.p2pool_enabled = true;
+    }
 
     let submit = true;
 
