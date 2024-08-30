@@ -4410,7 +4410,7 @@ dependencies = [
 
 [[package]]
 name = "xtrgpuminer"
-version = "0.1.7-pre.4"
+version = "0.1.7-pre.5"
 dependencies = [
  "anyhow",
  "axum 0.7.5",
