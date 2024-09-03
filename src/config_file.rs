@@ -1,4 +1,8 @@
-use std::{fs::File, io::BufReader, path::PathBuf};
+use std::{
+    fs::File,
+    io::BufReader,
+    path::{Path, PathBuf},
+};
 
 use anyhow;
 
@@ -28,14 +32,14 @@ impl Default for ConfigFile {
 }
 
 impl ConfigFile {
-    pub(crate) fn load(path: PathBuf) -> Result<Self, anyhow::Error> {
+    pub(crate) fn load(path: &PathBuf) -> Result<Self, anyhow::Error> {
         let file = File::open(path)?;
         let reader = BufReader::new(file);
         let config = serde_json::from_reader(reader)?;
         Ok(config)
     }
 
-    pub(crate) fn save(&self, path: &str) -> Result<(), anyhow::Error> {
+    pub(crate) fn save(&self, path: &Path) -> Result<(), anyhow::Error> {
         let file = File::create(path)?;
         serde_json::to_writer_pretty(file, self)?;
         Ok(())

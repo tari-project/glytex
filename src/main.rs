@@ -102,7 +102,7 @@ async fn main_inner() -> Result<(), anyhow::Error> {
 
     let benchmark = cli.benchmark;
 
-    let mut config = match ConfigFile::load(cli.config.unwrap_or_else(|| {
+    let mut config = match ConfigFile::load(&cli.config.as_ref().cloned().unwrap_or_else(|| {
         let mut path = current_dir().expect("no current directory");
         path.push("config.json");
         path
@@ -111,7 +111,12 @@ async fn main_inner() -> Result<(), anyhow::Error> {
         Err(err) => {
             eprintln!("Error loading config file: {}. Creating new one", err);
             let default = ConfigFile::default();
-            default.save("config.json").expect("Could not save default config");
+            let path = cli.config.unwrap_or_else(|| {
+                let mut path = current_dir().expect("no current directory");
+                path.push("config.json");
+                path
+            });
+            default.save(&path).expect("Could not save default config");
             default
         },
     };
