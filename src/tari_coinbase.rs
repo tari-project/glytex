@@ -1,5 +1,5 @@
 use rand::rngs::OsRng;
-use tari_common_types::{tari_address::TariAddress, types::PublicKey, MaxSizeBytes};
+use tari_common_types::{tari_address::TariAddress, types::PublicKey};
 use tari_core::{
     consensus::ConsensusConstants,
     one_sided::{
@@ -9,7 +9,9 @@ use tari_core::{
     transactions::{
         key_manager::{MemoryDbKeyManager, TariKeyId, TransactionKeyManagerBranch, TransactionKeyManagerInterface},
         tari_amount::MicroMinotari,
-        transaction_components::{RangeProofType, Transaction, TransactionKernel, TransactionOutput, WalletOutput},
+        transaction_components::{
+            CoinBaseExtra, RangeProofType, Transaction, TransactionKernel, TransactionOutput, WalletOutput,
+        },
         CoinbaseBuildError, CoinbaseBuilder,
     },
 };
@@ -34,7 +36,7 @@ pub async fn generate_coinbase(
         fee,
         reward,
         height,
-        &MaxSizeBytes::from_bytes_checked(extra).unwrap(),
+        &CoinBaseExtra::from_bytes_checked(extra).unwrap(),
         key_manager,
         &script_key_id,
         wallet_payment_address,
