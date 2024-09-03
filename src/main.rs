@@ -1,3 +1,4 @@
+use std::fs;
 use std::str::FromStr;
 use std::{convert::TryInto, env::current_dir, path::PathBuf, sync::Arc, thread, time::Instant};
 
@@ -116,6 +117,8 @@ async fn main_inner() -> Result<(), anyhow::Error> {
                 path.push("config.json");
                 path
             });
+            dbg!(&path);
+            fs::create_dir_all(path.parent().expect("no parent"))?;
             default.save(&path).expect("Could not save default config");
             default
         },
