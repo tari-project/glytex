@@ -257,6 +257,22 @@ jobs:
         run: |
           ls -alhtR target/${{ matrix.builds.target }}/${{ env.TS_BUILD }}/
 
+      - name: Sign files with Trusted Signing
+        if: startsWith(runner.os,'Windows')
+        uses: azure/trusted-signing-action@v0.4.0
+        with:
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          endpoint: https://eus.codesigning.azure.net/
+          trusted-signing-account-name: Tari
+          certificate-profile-name: Tarilabs
+          files-folder: ${{ github.workspace }}/target/${{ matrix.builds.target }}/${{ env.TS_BUILD }}/
+          files-folder-filter: exe,dll
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+
       - name: Archive and Checksum Binaries
         shell: bash
         run: |
