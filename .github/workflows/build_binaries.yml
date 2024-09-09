@@ -16,7 +16,7 @@ name: Build Matrix of Binaries
         default: "esme"
 
 env:
-  TS_FILENAME: "xtrgpuminer"
+  TS_FILENAME: "glytex"
   TS_BUNDLE_ID_BASE: "com.tarilabs"
   TS_SIG_FN: "sha256-unsigned.txt"
   # TS_BUILD: "debug"
@@ -257,8 +257,10 @@ jobs:
         run: |
           ls -alhtR target/${{ matrix.builds.target }}/${{ env.TS_BUILD }}/
 
-      - name: Sign files with Trusted Signing
-        if: startsWith(runner.os,'Windows')
+      - name: Sign Windows files with Trusted Certificate
+        if: ${{ ( startsWith(runner.os,'Windows') ) && ( env.AZURE_TENANT_ID != '' ) }}
+        env:
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
         uses: azure/trusted-signing-action@v0.4.0
         with:
           azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
