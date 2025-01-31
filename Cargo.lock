@@ -591,7 +591,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b823f24e72fa0c68aa14a250ae1c0848e68d4ae188b71c3972343e45b46f8644"
 dependencies = [
  "libc",
- "opencl-sys 0.2.9",
+ "opencl-sys",
  "thiserror",
 ]
 
@@ -1314,6 +1314,40 @@ name = "glob"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a8d1add55171497b4705a648c6b583acafb01d58050a51727785f0b2c8e0a2b2"
+
+[[package]]
+name = "glytex"
+version = "0.2.12"
+dependencies = [
+ "anyhow",
+ "axum",
+ "clap 4.5.27",
+ "cust",
+ "libsqlite3-sys",
+ "log",
+ "log4rs",
+ "minotari_app_grpc",
+ "num-format",
+ "opencl-sys",
+ "opencl3",
+ "prost 0.13.4",
+ "prost-types 0.13.4",
+ "rand",
+ "serde",
+ "serde_json",
+ "sha3",
+ "tari_common",
+ "tari_common_types",
+ "tari_core",
+ "tari_crypto",
+ "tari_key_manager",
+ "tari_script",
+ "tari_shutdown",
+ "tari_utilities",
+ "thiserror",
+ "tokio",
+ "tonic",
+]
 
 [[package]]
 name = "group"
@@ -2372,15 +2406,6 @@ name = "opencl-sys"
 version = "0.2.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "de15dd01496ae90c5799f5266184ab020082b4065800ff0b732f489371d0e5cf"
-dependencies = [
- "libc",
-]
-
-[[package]]
-name = "opencl-sys"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5ff82626c25901923bc3474911e5ca9b32593279323f90cc0eff5eb81cd39baa"
 dependencies = [
  "libc",
 ]
@@ -4825,40 +4850,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "05f360fc0b24296329c78fda852a1e9ae82de9cf7b27dae4b7f62f118f77b9ed"
 dependencies = [
  "tap",
-]
-
-[[package]]
-name = "xtrgpuminer"
-version = "0.2.12"
-dependencies = [
- "anyhow",
- "axum",
- "clap 4.5.27",
- "cust",
- "libsqlite3-sys",
- "log",
- "log4rs",
- "minotari_app_grpc",
- "num-format",
- "opencl-sys 0.4.0",
- "opencl3",
- "prost 0.13.4",
- "prost-types 0.13.4",
- "rand",
- "serde",
- "serde_json",
- "sha3",
- "tari_common",
- "tari_common_types",
- "tari_core",
- "tari_crypto",
- "tari_key_manager",
- "tari_script",
- "tari_shutdown",
- "tari_utilities",
- "thiserror",
- "tokio",
- "tonic",
 ]
 
 [[package]]
