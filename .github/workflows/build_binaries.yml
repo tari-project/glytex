@@ -16,7 +16,7 @@ name: Build Matrix of Binaries
         default: "esme"
 
 env:
-  TS_FILENAME: "xtrgpuminer"
+  TS_FILENAME: "glytex"
   TS_BUNDLE_ID_BASE: "com.tarilabs"
   TS_SIG_FN: "sha256-unsigned.txt"
   # TS_BUILD: "debug"
