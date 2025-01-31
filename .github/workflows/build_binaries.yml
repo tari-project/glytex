@@ -16,7 +16,7 @@ name: Build Matrix of Binaries
         default: "esme"
 
 env:
-  TS_FILENAME: "xtrgpuminer"
+  TS_FILENAME: "glytex"
   TS_BUNDLE_ID_BASE: "com.tarilabs"
   TS_SIG_FN: "sha256-unsigned.txt"
   # TS_BUILD: "debug"
@@ -244,6 +244,8 @@ jobs:
         run: |
           cargo install cargo-auditable cargo-audit
           echo "CARGO=${{ env.CARGO }} auditable" >> $GITHUB_ENV
+          # Disable - [cross] warning: Found conflicting cross configuration
+          echo "CROSS_NO_WARNINGS=0" >> $GITHUB_ENV
 
       - name: Build release targets
         # if: ${{ startsWith(github.ref, 'refs/tags/v') }}
