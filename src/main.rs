@@ -4,14 +4,10 @@ use std::{
     fs::{self, File},
     io::Write,
     panic,
-    path::PathBuf,
+    path::{Path, PathBuf},
     process,
     str::FromStr,
-    sync::{
-        atomic::{AtomicU64, Ordering},
-        Arc,
-        OnceLock,
-    },
+    sync::{Arc, OnceLock},
     thread,
     time::{Duration, Instant},
 };
@@ -143,6 +139,21 @@ async fn main() {
             std::process::exit(1);
         },
     }
+}
+
+fn detect_and_return_status_file<T: AsRef<Path>>(
+    multi_engine_wrapper: &mut MultiEngineWrapper,
+    gpu_status_path: T,
+) -> GpuStatusFile {
+    let _engines = multi_engine_wrapper.create_status_files_for_each_engine(gpu_status_path.as_ref().parent().unwrap());
+    let res = GpuStatusFile::load(gpu_status_path.as_ref()).unwrap_or_else(|err| {
+        let default = GpuStatusFile::default();
+        default
+            .save(gpu_status_path.as_ref())
+            .expect("Could not save default gpu status");
+        default
+    });
+    res
 }
 
 #[derive(Parser)]
@@ -302,13 +313,22 @@ async fn main_inner() -> Result<(), anyhow::Error> {
     let gpu_status_file_name = format!("{}_gpu_status.json", selected_cli_engine.to_string());
     gpu_status_path.push(gpu_status_file_name);
 
-    let gpu_status_file = GpuStatusFile::load(&gpu_status_path).unwrap_or_else(|_| {
-        let default = GpuStatusFile::default();
-        default
-            .save(&gpu_status_path)
-            .expect("Could not save default gpu status");
-        default
-    });
+    let gpu_status_file = match GpuStatusFile::load(&gpu_status_path) {
+        Ok(f) => {
+            if f.gpu_devices.is_empty() {
+                println!("No GPU devices detected in status file, detecting...");
+                info!(target: LOG_TARGET, "No GPU devices detected in status file, detecting...");
+                detect_and_return_status_file(&mut multi_engine_wrapper, &gpu_status_path)
+            } else {
+                f
+            }
+        },
+        Err(err) => {
+            eprintln!("Error loading gpu status file: {}. Detecting...", err);
+            // Run detect.
+            detect_and_return_status_file(&mut multi_engine_wrapper, &gpu_status_path)
+        },
+    };
 
     if let Some(ref addr) = cli.tari_address {
         config.tari_address = addr.clone();
@@ -349,6 +369,11 @@ async fn main_inner() -> Result<(), anyhow::Error> {
     }
 
     let gpu_devices = gpu_status_file.gpu_devices.clone();
+
+    if gpu_devices.is_empty() {
+        eprintln!("No GPU devices detected");
+        process::exit(1);
+    }
 
     gpu_devices.iter().for_each(|(device_name, gpu_device)| {
         println!(

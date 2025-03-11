@@ -59,14 +59,14 @@ impl GpuStatusFile {
         }
     }
 
-    pub fn load(path: &PathBuf) -> Result<Self, anyhow::Error> {
+    pub fn load<T: AsRef<Path>>(path: T) -> Result<Self, anyhow::Error> {
         let file = File::open(path)?;
         let reader = BufReader::new(file);
         let config = serde_json::from_reader(reader)?;
         Ok(config)
     }
 
-    pub fn save(&self, path: &Path) -> Result<(), anyhow::Error> {
+    pub fn save<T: AsRef<Path>>(&self, path: T) -> Result<(), anyhow::Error> {
         let file = File::create(path)?;
         serde_json::to_writer_pretty(file, self)?;
         Ok(())

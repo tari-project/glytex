@@ -1,4 +1,8 @@
-use std::{any::Any, fs::create_dir_all, path::PathBuf};
+use std::{
+    any::Any,
+    fs::create_dir_all,
+    path::{Path, PathBuf},
+};
 
 use log::warn;
 
@@ -33,10 +37,10 @@ impl EngineType {
     }
 
     pub fn from_string(engine_type: &str) -> Self {
-        match engine_type {
-            "CUDA" => EngineType::Cuda,
-            "OpenCL" => EngineType::OpenCL,
-            "Metal" => EngineType::Metal,
+        match engine_type.to_lowercase().as_str() {
+            "nvidia" | "cuda" => EngineType::Cuda,
+            "opencl" => EngineType::OpenCL,
+            "metal" => EngineType::Metal,
             _ => panic!("Unknown engine type"),
         }
     }
@@ -66,14 +70,14 @@ impl MultiEngineWrapper {
         }
     }
 
-    pub fn create_status_file(
+    pub fn create_status_file<T: AsRef<Path>>(
         &self,
-        destination_folder: &PathBuf,
+        destination_folder: T,
         engine_type: EngineType,
         gpu_devices: Vec<GpuDevice>,
     ) -> Result<(), anyhow::Error> {
         let file_name = format!("{}_gpu_status.json", engine_type.to_string());
-        let status_file_path = destination_folder.join(file_name);
+        let status_file_path = destination_folder.as_ref().join(file_name);
 
         let status_file = GpuStatusFile::new(gpu_devices, &status_file_path);
 
@@ -98,7 +102,7 @@ impl MultiEngineWrapper {
         return Ok(());
     }
 
-    pub fn create_status_files_for_each_engine(&mut self, destination_folder: PathBuf) -> Vec<EngineType> {
+    pub fn create_status_files_for_each_engine<T: AsRef<Path>>(&mut self, destination_folder: T) -> Vec<EngineType> {
         let mut engines_with_created_status_files: Vec<EngineType> = Vec::new();
         #[cfg(feature = "opencl")]
         {
@@ -107,7 +111,8 @@ impl MultiEngineWrapper {
             }
             match self.opencl_engine.detect_devices() {
                 Ok(gpu_devices) => {
-                    if let Ok(_) = self.create_status_file(&destination_folder, EngineType::OpenCL, gpu_devices) {
+                    if let Ok(_) = self.create_status_file(destination_folder.as_ref(), EngineType::OpenCL, gpu_devices)
+                    {
                         engines_with_created_status_files.push(EngineType::OpenCL);
                     }
                 },
@@ -124,7 +129,7 @@ impl MultiEngineWrapper {
             }
             match self.cuda_engine.detect_devices() {
                 Ok(gpu_devices) => {
-                    if let Ok(_) = self.create_status_file(&destination_folder, EngineType::Cuda, gpu_devices) {
+                    if let Ok(_) = self.create_status_file(destination_folder.as_ref(), EngineType::Cuda, gpu_devices) {
                         engines_with_created_status_files.push(EngineType::Cuda);
                     }
                 },
@@ -141,7 +146,8 @@ impl MultiEngineWrapper {
             }
             match self.metal_engine.detect_devices() {
                 Ok(gpu_devices) => {
-                    if let Ok(_) = self.create_status_file(&destination_folder, EngineType::Metal, gpu_devices) {
+                    if let Ok(_) = self.create_status_file(destination_folder.as_ref(), EngineType::Metal, gpu_devices)
+                    {
                         engines_with_created_status_files.push(EngineType::Metal);
                     }
                 },

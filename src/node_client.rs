@@ -90,7 +90,18 @@ impl NodeClient for BaseNodeClientWrapper {
     }
 
     async fn get_height(&mut self) -> Result<HeightData, anyhow::Error> {
-        todo!()
+        let res = self.client.get_tip_info(Empty {}).await?;
+        let res = res.into_inner();
+        if let Some(metadata) = res.metadata {
+            Ok(HeightData {
+                height: metadata.best_block_height,
+                tip_hash: metadata.best_block_hash,
+                p2pool_height: 0,
+                p2pool_tip_hash: vec![],
+            })
+        } else {
+            Err(anyhow!("missing metadata"))
+        }
     }
 }
 
