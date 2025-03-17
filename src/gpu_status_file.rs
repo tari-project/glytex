@@ -1,5 +1,4 @@
 use std::{
-    collections::HashMap,
     fs::File,
     io::BufReader,
     path::{Path, PathBuf},
@@ -39,13 +38,13 @@ pub struct GpuDevice {
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
 pub struct GpuStatusFile {
-    pub gpu_devices: HashMap<String, GpuDevice>,
+    pub gpu_devices: Vec<GpuDevice>,
 }
 
 impl Default for GpuStatusFile {
     fn default() -> Self {
         Self {
-            gpu_devices: HashMap::new(),
+            gpu_devices: Vec::new(),
         }
     }
 }
@@ -72,33 +71,25 @@ impl GpuStatusFile {
         Ok(())
     }
 
-    fn resolve_settings_for_detected_devices(
-        gpu_devices: Vec<GpuDevice>,
-        file_path: &PathBuf,
-    ) -> HashMap<String, GpuDevice> {
+    fn resolve_settings_for_detected_devices(gpu_devices: Vec<GpuDevice>, file_path: &PathBuf) -> Vec<GpuDevice> {
         match Self::load(file_path) {
-            Ok(file) => {
-                let mut resolved_gpu_devices = HashMap::new();
-                for device in gpu_devices {
-                    let device_name = device.device_name.clone();
-                    let resolved_device = match file.gpu_devices.get(&device_name) {
+            Ok(file) => gpu_devices
+                .into_iter()
+                .map(|device| {
+                    let device_index = device.device_index.clone();
+                    match file.gpu_devices.iter().find(|d| d.device_index == device_index) {
                         Some(existing_device) => {
                             let mut resolved_device = device.clone();
                             resolved_device.settings = existing_device.settings.clone();
                             resolved_device
                         },
                         None => device,
-                    };
-                    resolved_gpu_devices.insert(device_name, resolved_device);
-                }
-                resolved_gpu_devices
-            },
+                    }
+                })
+                .collect(),
             Err(e) => {
                 warn!("Could not load GPU status file: {}. Using detected devices", e);
                 gpu_devices
-                    .into_iter()
-                    .map(|device| (device.device_name.clone(), device))
-                    .collect()
             },
         }
     }

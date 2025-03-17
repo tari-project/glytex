@@ -375,16 +375,16 @@ async fn main_inner() -> Result<(), anyhow::Error> {
         process::exit(1);
     }
 
-    gpu_devices.iter().for_each(|(device_name, gpu_device)| {
+    gpu_devices.iter().for_each(|gpu_device| {
         println!(
             "Device: {} is available: {} is excluded {}",
-            device_name, gpu_device.settings.is_available, gpu_device.settings.is_excluded
+            gpu_device.device_name, gpu_device.settings.is_available, gpu_device.settings.is_excluded
         );
     });
 
     let num_devices = multi_engine_wrapper.num_devices()?;
     let devices_to_use: Vec<u32> = gpu_devices
-        .into_values()
+        .iter()
         .filter(|d| d.settings.is_available && !d.settings.is_excluded)
         .map(|d| d.device_index)
         .collect();
