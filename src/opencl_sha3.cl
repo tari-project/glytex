@@ -52,12 +52,16 @@ kernel void sha3(global ulong *buffer, ulong nonce_start, ulong difficulty,
     uint r, x, y, t;
     ulong tmp, current, C[5];
     for (r = 0; r < 24; ++r) {
-      C[0] = state[0] ^ state[5] ^ state[10] ^ state[15] ^ state[20] ^ rotate(state[2] ^ state[7] ^ state[12] ^ state[17] ^ state[22], 1UL);
-      C[1] = state[1] ^ state[6] ^ state[11] ^ state[16] ^ state[21] ^ rotate(state[3] ^ state[8] ^ state[13] ^ state[18] ^ state[23], 1UL);
-      C[2] = state[2] ^ state[7] ^ state[12] ^ state[17] ^ state[22] ^ rotate(state[4] ^ state[9] ^ state[14] ^ state[19] ^ state[24], 1UL);
-      C[3] = state[3] ^ state[8] ^ state[13] ^ state[18] ^ state[23] ^ rotate(state[0] ^ state[5] ^ state[10] ^ state[15] ^ state[20], 1UL);
-      C[4] = state[4] ^ state[9] ^ state[14] ^ state[19] ^ state[24] ^ rotate(state[1] ^ state[6] ^ state[11] ^ state[16] ^ state[21], 1UL);
-
+      for (x = 0; x < 5; ++x) {
+        C[x] = state[x] ^ state[x + 5] ^ state[x + 10] ^ state[x + 15] ^
+               state[x + 20];
+      }
+      for (x = 0; x < 5; ++x) {
+        tmp = C[(x + 4) % 5] ^ rotate(C[(x + 1) % 5], 1ul);
+        for (y = 0; y < 5; ++y) {
+          state[x + y * 5] ^= tmp;
+        }
+      }
       current = state[1];
       for (t = 0; t < 24; ++t) {
         tmp = state[pos[t]];
@@ -81,12 +85,16 @@ kernel void sha3(global ulong *buffer, ulong nonce_start, ulong difficulty,
     state[16] = 0x8000000000000000ul;
 
     for (r = 0; r < 24; ++r) {
-      C[0] = state[0] ^ state[5] ^ state[10] ^ state[15] ^ state[20] ^ rotate(state[2] ^ state[7] ^ state[12] ^ state[17] ^ state[22], 1UL);
-      C[1] = state[1] ^ state[6] ^ state[11] ^ state[16] ^ state[21] ^ rotate(state[3] ^ state[8] ^ state[13] ^ state[18] ^ state[23], 1UL);
-      C[2] = state[2] ^ state[7] ^ state[12] ^ state[17] ^ state[22] ^ rotate(state[4] ^ state[9] ^ state[14] ^ state[19] ^ state[24], 1UL);
-      C[3] = state[3] ^ state[8] ^ state[13] ^ state[18] ^ state[23] ^ rotate(state[0] ^ state[5] ^ state[10] ^ state[15] ^ state[20], 1UL);
-      C[4] = state[4] ^ state[9] ^ state[14] ^ state[19] ^ state[24] ^ rotate(state[1] ^ state[6] ^ state[11] ^ state[16] ^ state[21], 1UL);
-
+      for (x = 0; x < 5; ++x) {
+        C[x] = state[x] ^ state[x + 5] ^ state[x + 10] ^ state[x + 15] ^
+               state[x + 20];
+      }
+      for (x = 0; x < 5; ++x) {
+        tmp = C[(x + 4) % 5] ^ rotate(C[(x + 1) % 5], 1ul);
+        for (y = 0; y < 5; ++y) {
+          state[x + y * 5] ^= tmp;
+        }
+      }
       current = state[1];
       for (t = 0; t < 24; ++t) {
         tmp = state[pos[t]];
@@ -111,12 +119,16 @@ kernel void sha3(global ulong *buffer, ulong nonce_start, ulong difficulty,
 
     // round 3
     for (r = 0; r < 24; ++r) {
-      C[0] = state[0] ^ state[5] ^ state[10] ^ state[15] ^ state[20] ^ rotate(state[2] ^ state[7] ^ state[12] ^ state[17] ^ state[22], 1UL);
-      C[1] = state[1] ^ state[6] ^ state[11] ^ state[16] ^ state[21] ^ rotate(state[3] ^ state[8] ^ state[13] ^ state[18] ^ state[23], 1UL);
-      C[2] = state[2] ^ state[7] ^ state[12] ^ state[17] ^ state[22] ^ rotate(state[4] ^ state[9] ^ state[14] ^ state[19] ^ state[24], 1UL);
-      C[3] = state[3] ^ state[8] ^ state[13] ^ state[18] ^ state[23] ^ rotate(state[0] ^ state[5] ^ state[10] ^ state[15] ^ state[20], 1UL);
-      C[4] = state[4] ^ state[9] ^ state[14] ^ state[19] ^ state[24] ^ rotate(state[1] ^ state[6] ^ state[11] ^ state[16] ^ state[21], 1UL);
-
+      for (x = 0; x < 5; ++x) {
+        C[x] = state[x] ^ state[x + 5] ^ state[x + 10] ^ state[x + 15] ^
+               state[x + 20];
+      }
+      for (x = 0; x < 5; ++x) {
+        tmp = C[(x + 4) % 5] ^ rotate(C[(x + 1) % 5], 1ul);
+        for (y = 0; y < 5; ++y) {
+          state[x + y * 5] ^= tmp;
+        }
+      }
       current = state[1];
       for (t = 0; t < 24; ++t) {
         tmp = state[pos[t]];
