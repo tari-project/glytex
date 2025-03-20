@@ -122,11 +122,13 @@ async fn main() {
         };
 
         error!(target: "tari::p2pool::main", "Panic occurred at {}: {}", location, message);
+        eprintln!("Panic at {}: {}", location, message);
 
         // Optionally, write a custom message directly to the file
         let mut file = File::create("panic.log").unwrap();
         file.write_all(format!("Panic at {}: {}", location, message).as_bytes())
             .unwrap();
+        process::exit(500);
     }));
 
     match main_inner().await {
@@ -769,6 +771,7 @@ fn run_thread(
         let mut max_diff = 0;
         let mut last_printed = Instant::now();
         let mut last_reported_stats = Instant::now();
+        let kernel = gpu_engine.create_kernel(&gpu_function)?;
         loop {
             if running_time.elapsed() > Duration::from_secs(10) && benchmark {
                 let hash_rate = (nonce_start - first_nonce) / elapsed.elapsed().as_secs();
@@ -781,6 +784,7 @@ fn run_thread(
             }
             let num_iterations = 1;
             let result = gpu_engine.mine(
+                &kernel,
                 &gpu_function,
                 &context,
                 &data,

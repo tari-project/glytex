@@ -47,8 +47,13 @@ impl<TEngineImpl: EngineImpl> GpuEngine<TEngineImpl> {
         // }
     }
 
+    pub fn create_kernel(&self, function: &TEngineImpl::Function) -> Result<TEngineImpl::Kernel, anyhow::Error> {
+        self.inner.create_kernel(function)
+    }
+
     pub fn mine(
         &self,
+        kernel: &TEngineImpl::Kernel,
         function: &TEngineImpl::Function,
         context: &TEngineImpl::Context,
         data: &[u64],
@@ -59,6 +64,7 @@ impl<TEngineImpl: EngineImpl> GpuEngine<TEngineImpl> {
         grid_size: u32,
     ) -> Result<(Option<u64>, u32, u64), anyhow::Error> {
         self.inner.mine(
+            kernel,
             function,
             context,
             data,

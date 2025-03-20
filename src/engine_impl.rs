@@ -10,6 +10,7 @@ use crate::{
 pub trait EngineImpl {
     type Context: Any;
     type Function: Any;
+    type Kernel: Any;
 
     fn get_engine_type(&self) -> EngineType;
 
@@ -23,9 +24,12 @@ pub trait EngineImpl {
 
     fn create_main_function(&self, context: &Self::Context) -> Result<Self::Function, anyhow::Error>;
 
+    fn create_kernel(&self, function: &Self::Function) -> Result<Self::Kernel, anyhow::Error>;
+
     fn mine(
         &self,
-        function: &Self::Function,
+        kernel: &Self::Kernel,
+        func: &Self::Function,
         context: &Self::Context,
         data: &[u64],
         min_difficulty: u64,

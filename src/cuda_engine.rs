@@ -30,6 +30,7 @@ impl CudaEngine {
 impl EngineImpl for CudaEngine {
     type Context = CudaContext;
     type Function = CudaFunction;
+    type Kernel = ();
 
     fn init(&mut self) -> Result<(), anyhow::Error> {
         info!(target: LOG_TARGET, "Init CUDA Engine");
@@ -105,8 +106,15 @@ impl EngineImpl for CudaEngine {
         Ok(CudaFunction { module })
     }
 
+    fn create_kernel(&self, function: &Self::Function) -> Result<Self::Kernel, anyhow::Error> {
+        // let kernel = function.module.get_function("keccakKernel")?;
+        // Ok(CudaKernel { kernel })
+        Ok(())
+    }
+
     fn mine(
         &self,
+        _kernel: &Self::Kernel,
         function: &Self::Function,
         context: &Self::Context,
         data: &[u64],

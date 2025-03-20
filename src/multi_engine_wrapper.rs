@@ -164,6 +164,7 @@ impl MultiEngineWrapper {
 impl EngineImpl for MultiEngineWrapper {
     type Context = Box<dyn Any>;
     type Function = Box<dyn Any>;
+    type Kernel = Box<dyn Any>;
 
     fn get_engine_type(&self) -> EngineType {
         self.selected_engine.clone()
@@ -226,7 +227,7 @@ impl EngineImpl for MultiEngineWrapper {
         }
     }
 
-    fn create_main_function(&self, context: &Self::Context) -> Result<Self::Function, anyhow::Error> {
+    fn create_main_function(&self, context: &Self::Context) -> Result<Self::Kernel, anyhow::Error> {
         match self.selected_engine {
             #[cfg(feature = "nvidia")]
             EngineType::Cuda => self
@@ -247,8 +248,30 @@ impl EngineImpl for MultiEngineWrapper {
         }
     }
 
+    fn create_kernel(&self, function: &Self::Function) -> Result<Self::Kernel, anyhow::Error> {
+        match self.selected_engine {
+            #[cfg(feature = "nvidia")]
+            EngineType::Cuda => self
+                .cuda_engine
+                .create_kernel(function.downcast_ref().unwrap())
+                .map(|f| Box::new(f) as Box<dyn Any>),
+            #[cfg(feature = "opencl")]
+            EngineType::OpenCL => self
+                .opencl_engine
+                .create_kernel(function.downcast_ref().unwrap())
+                .map(|f| Box::new(f) as Box<dyn Any>),
+            #[cfg(feature = "metal")]
+            EngineType::Metal => self
+                .metal_engine
+                .create_kernel(function.downcast_ref().unwrap())
+                .map(|f| Box::new(f) as Box<dyn Any>),
+            _ => panic!("Unknown engine type"),
+        }
+    }
+
     fn mine(
         &self,
+        kernel: &Self::Kernel,
         function: &Self::Function,
         context: &Self::Context,
         data: &[u64],
@@ -261,6 +284,7 @@ impl EngineImpl for MultiEngineWrapper {
         match self.selected_engine {
             #[cfg(feature = "nvidia")]
             EngineType::Cuda => self.cuda_engine.mine(
+                kernel.downcast_ref().unwrap(),
                 function.downcast_ref().unwrap(),
                 context.downcast_ref().unwrap(),
                 data,
@@ -272,6 +296,7 @@ impl EngineImpl for MultiEngineWrapper {
             ),
             #[cfg(feature = "opencl")]
             EngineType::OpenCL => self.opencl_engine.mine(
+                kernel.downcast_ref().unwrap(),
                 function.downcast_ref().unwrap(),
                 context.downcast_ref().unwrap(),
                 data,
@@ -283,6 +308,7 @@ impl EngineImpl for MultiEngineWrapper {
             ),
             #[cfg(feature = "metal")]
             EngineType::Metal => self.metal_engine.mine(
+                kernel.downcast_ref().unwrap(),
                 function.downcast_ref().unwrap(),
                 context.downcast_ref().unwrap(),
                 data,

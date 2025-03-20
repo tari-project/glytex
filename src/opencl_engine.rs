@@ -49,6 +49,7 @@ impl OpenClEngine {
 impl EngineImpl for OpenClEngine {
     type Context = OpenClContext;
     type Function = OpenClFunction;
+    type Kernel = OpenClKernel;
 
     fn init(&mut self) -> Result<(), anyhow::Error> {
         debug!(target: LOG_TARGET, "OpenClEngine: init engine");
@@ -151,9 +152,15 @@ impl EngineImpl for OpenClEngine {
         Ok(OpenClFunction { program })
     }
 
+    fn create_kernel(&self, function: &Self::Function) -> Result<Self::Kernel, anyhow::Error> {
+        let kernel = Kernel::create(&function.program, "sha3")?;
+        Ok(OpenClKernel::new(kernel))
+    }
+
     fn mine(
         &self,
-        function: &Self::Function,
+        kernel: &Self::Kernel,
+        _function: &Self::Function,
         context: &Self::Context,
         data: &[u64],
         min_difficulty: u64,
@@ -164,7 +171,7 @@ impl EngineImpl for OpenClEngine {
     ) -> Result<(Option<u64>, u32, u64), Error> {
         // TODO: put in multiple threads
 
-        let kernels = vec![Kernel::create(&function.program, "sha3").expect("bad kernel")];
+        let kernels = vec![&kernel.kernel];
 
         //  let queue = CommandQueue::create_default_with_properties(
         //     &context.context,
@@ -340,5 +347,15 @@ impl FunctionImpl for OpenClFunction {
         // let threads = device.max_compute_units()? as u32;
         Ok((kernel.get_work_group_size(device.id())? as u32, 1000))
         // self.program.build(vec![&device], "")?.Ok((1000, 1000))
+    }
+}
+
+pub struct OpenClKernel {
+    pub(crate) kernel: Kernel,
+}
+
+impl OpenClKernel {
+    pub fn new(kernel: Kernel) -> Self {
+        OpenClKernel { kernel }
     }
 }
