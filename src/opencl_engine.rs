@@ -236,7 +236,7 @@ impl EngineImpl for OpenClEngine {
             .set_arg(&output_buffer)
 
             .set_global_work_size((grid_size * block_size) as usize)
-            // .set_local_work_size((grid_size * block_size / 2) as usize)
+            // .set_local_work_size(grid_size as usize)
             // .set_wait_event(&y_write_event)
             .enqueue_nd_range(&queue)
                 {

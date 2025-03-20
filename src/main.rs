@@ -1,4 +1,5 @@
 use std::{
+    cmp,
     convert::TryInto,
     env::current_dir,
     fs::{self, File},
@@ -772,6 +773,7 @@ fn run_thread(
         let mut last_printed = Instant::now();
         let mut last_reported_stats = Instant::now();
         let kernel = gpu_engine.create_kernel(&gpu_function)?;
+        let mut num_iterations = 4;
         loop {
             if running_time.elapsed() > Duration::from_secs(10) && benchmark {
                 let hash_rate = (nonce_start - first_nonce) / elapsed.elapsed().as_secs();
@@ -782,7 +784,7 @@ fn run_thread(
                 debug!(target: LOG_TARGET, "Elapsed {:?} > {:?}", elapsed.elapsed().as_secs(), config.template_refresh_secs );
                 break;
             }
-            let num_iterations = 1;
+            let mining_time = Instant::now();
             let result = gpu_engine.mine(
                 &kernel,
                 &gpu_function,
@@ -801,6 +803,11 @@ fn run_thread(
                             * data_buf.as_device_ptr(),
                             * &output_buf, */
             );
+            if mining_time.elapsed().as_secs() > 1500 {
+                num_iterations = cmp::max(1, num_iterations - 1);
+            } else if mining_time.elapsed().as_millis() < 1000 {
+                num_iterations = num_iterations + 1;
+            }
             let (nonce, hashes, diff) = match result {
                 Ok(values) => {
                     debug!(target: LOG_TARGET,
