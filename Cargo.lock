@@ -302,7 +302,7 @@ version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "978e81a45367d2409ecd33369a45dda2e9a3ca516153ec194de1fbda4b9fb79d"
 dependencies = [
- "thiserror",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -592,13 +592,14 @@ dependencies = [
 
 [[package]]
 name = "cl3"
-version = "0.9.5"
+version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b823f24e72fa0c68aa14a250ae1c0848e68d4ae188b71c3972343e45b46f8644"
+checksum = "bbbe2ead838d15a7a4f36221ce4dee5c3b88f68fa90e2d3dab8677769635e478"
 dependencies = [
+ "dlopen2",
  "libc",
  "opencl-sys",
- "thiserror",
+ "thiserror 2.0.12",
 ]
 
 [[package]]
@@ -1002,6 +1003,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "dlopen2"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9e1297103d2bbaea85724fcee6294c2d50b1081f9ad47d0f6f6f61eda65315a6"
+dependencies = [
+ "dlopen2_derive",
+ "libc",
+ "once_cell",
+ "winapi",
+]
+
+[[package]]
+name = "dlopen2_derive"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f2b99bf03862d7f545ebc28ddd33a665b50865f4dfd84031a393823879bd4c54"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.98",
+]
+
+[[package]]
 name = "doc-comment"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1372,7 +1396,7 @@ dependencies = [
  "tari_core",
  "tari_shutdown",
  "tari_utilities",
- "thiserror",
+ "thiserror 1.0.69",
  "tokio",
  "tonic",
 ]
@@ -1476,7 +1500,7 @@ dependencies = [
  "once_cell",
  "radix_trie",
  "rand",
- "thiserror",
+ "thiserror 1.0.69",
  "tokio",
  "tracing",
 ]
@@ -1504,7 +1528,7 @@ dependencies = [
  "ring",
  "rustls",
  "rustls-pemfile",
- "thiserror",
+ "thiserror 1.0.69",
  "time",
  "tinyvec",
  "tokio",
@@ -1529,7 +1553,7 @@ dependencies = [
  "rand",
  "resolv-conf",
  "smallvec",
- "thiserror",
+ "thiserror 1.0.69",
  "tokio",
  "tracing",
 ]
@@ -2103,7 +2127,7 @@ dependencies = [
  "serde-value",
  "serde_json",
  "serde_yaml",
- "thiserror",
+ "thiserror 1.0.69",
  "thread-id",
  "typemap-ors",
  "winapi",
@@ -2237,7 +2261,7 @@ dependencies = [
  "tari_max_size",
  "tari_script",
  "tari_utilities",
- "thiserror",
+ "thiserror 1.0.69",
  "tokio",
  "tonic",
  "tonic-build",
@@ -2282,7 +2306,7 @@ dependencies = [
  "hex-literal",
  "sealed",
  "serde",
- "thiserror",
+ "thiserror 1.0.69",
  "tiny-keccak",
 ]
 
@@ -2464,18 +2488,18 @@ checksum = "c08d65885ee38876c4f86fa503fb49d7b507c2b62552df7c70b2fce627e06381"
 
 [[package]]
 name = "opencl-sys"
-version = "0.2.9"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "de15dd01496ae90c5799f5266184ab020082b4065800ff0b732f489371d0e5cf"
+checksum = "e0ec2387e0753cff35d457b72d38be31b4272496a73248055469f30a3f7f3b74"
 dependencies = [
  "libc",
 ]
 
 [[package]]
 name = "opencl3"
-version = "0.9.5"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "26ab4a90cb496f787d3934deb0c54fa9d65e7bed710c10071234aab0196fba04"
+checksum = "90e51f3341907f2f0d817e9fb7660088c585a6da5d124d8ca53ce661b68f5b80"
 dependencies = [
  "cl3",
  "libc",
@@ -2772,7 +2796,7 @@ version = "1.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e17d47ce914bf4de440332250b0edd23ce48c005f59fab39d3335866b114f11a"
 dependencies = [
- "thiserror",
+ "thiserror 1.0.69",
  "toml 0.5.11",
 ]
 
@@ -3004,7 +3028,7 @@ checksum = "09c347596479c4796192e68aec20e62e31655b57753586f2b1ec320b779ef14c"
 dependencies = [
  "bitflags 1.3.2",
  "libc",
- "thiserror",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -3036,7 +3060,7 @@ checksum = "ba009ff324d1fc1b900bd1fdb31564febe58a8ccc8a6fdbb93b543d33b13ca43"
 dependencies = [
  "getrandom 0.2.15",
  "libredox",
- "thiserror",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -3604,7 +3628,7 @@ dependencies = [
  "structopt",
  "tari_features",
  "tempfile",
- "thiserror",
+ "thiserror 1.0.69",
  "toml 0.5.11",
 ]
 
@@ -3618,7 +3642,7 @@ dependencies = [
  "log",
  "serde",
  "tari_utilities",
- "thiserror",
+ "thiserror 1.0.69",
  "tokio",
 ]
 
@@ -3645,7 +3669,7 @@ dependencies = [
  "tari_common",
  "tari_crypto",
  "tari_utilities",
- "thiserror",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -3681,7 +3705,7 @@ dependencies = [
  "tari_shutdown",
  "tari_storage",
  "tari_utilities",
- "thiserror",
+ "thiserror 1.0.69",
  "tokio",
  "tokio-stream",
  "tokio-util 0.6.10",
@@ -3719,7 +3743,7 @@ dependencies = [
  "tari_shutdown",
  "tari_storage",
  "tari_utilities",
- "thiserror",
+ "thiserror 1.0.69",
  "tokio",
  "tower 0.4.13",
  "zeroize",
@@ -3800,7 +3824,7 @@ dependencies = [
  "tari_storage",
  "tari_test_utils",
  "tari_utilities",
- "thiserror",
+ "thiserror 1.0.69",
  "tokio",
  "tracing",
  "zeroize",
@@ -3872,7 +3896,7 @@ dependencies = [
  "tari_crypto",
  "tari_service_framework",
  "tari_utilities",
- "thiserror",
+ "thiserror 1.0.69",
  "tokio",
  "zeroize",
 ]
@@ -3885,7 +3909,7 @@ dependencies = [
  "borsh",
  "serde",
  "tari_utilities",
- "thiserror",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -3899,7 +3923,7 @@ dependencies = [
  "serde",
  "tari_crypto",
  "tari_utilities",
- "thiserror",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -3926,7 +3950,7 @@ dependencies = [
  "tari_shutdown",
  "tari_storage",
  "tari_utilities",
- "thiserror",
+ "thiserror 1.0.69",
  "tokio",
  "tokio-stream",
  "tower 0.4.13",
@@ -3948,7 +3972,7 @@ dependencies = [
  "tari_crypto",
  "tari_max_size",
  "tari_utilities",
- "thiserror",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -3961,7 +3985,7 @@ dependencies = [
  "futures 0.3.31",
  "log",
  "tari_shutdown",
- "thiserror",
+ "thiserror 1.0.69",
  "tokio",
  "tower-service",
 ]
@@ -3983,7 +4007,7 @@ dependencies = [
  "lmdb-zero",
  "log",
  "serde",
- "thiserror",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -4047,7 +4071,16 @@ version = "1.0.69"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6aaf5339b578ea85b50e080feb250a3e8ae8cfcdff9a461c9ec2904bc923f52"
 dependencies = [
- "thiserror-impl",
+ "thiserror-impl 1.0.69",
+]
+
+[[package]]
+name = "thiserror"
+version = "2.0.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "567b8a2dae586314f7be2a752ec7474332959c6460e02bde30d702a66d488708"
+dependencies = [
+ "thiserror-impl 2.0.12",
 ]
 
 [[package]]
@@ -4055,6 +4088,17 @@ name = "thiserror-impl"
 version = "1.0.69"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4fee6c4efc90059e10f81e6d42c60a18f76588c3d74cb83a0b242a2b6c7504c1"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.98",
+]
+
+[[package]]
+name = "thiserror-impl"
+version = "2.0.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7f7cf42b4507d8ea322120659672cf1b9dbb93f8f2d4ecfd6e51350ff5b17a1d"
 dependencies = [
  "proc-macro2",
  "quote",

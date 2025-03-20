@@ -15,7 +15,7 @@ use opencl3::{
     memory::{Buffer, CL_MEM_COPY_HOST_PTR, CL_MEM_READ_ONLY, CL_MEM_WRITE_ONLY},
     platform::{get_platforms, Platform},
     program::Program,
-    types::{cl_ulong, CL_TRUE},
+    types::{cl_ulong, CL_FALSE, CL_TRUE},
 };
 
 use crate::{
@@ -180,8 +180,7 @@ impl EngineImpl for OpenClEngine {
         // )?;
         unsafe {
             debug!(target: LOG_TARGET, "OpenClEngine: mine unsafe");
-            let queue = CommandQueue::create_default(&context.context, CL_QUEUE_PROFILING_ENABLE)
-                .expect("could not create command queue");
+            let queue = CommandQueue::create_default(&context.context, 0).expect("could not create command queue");
 
             debug!(target: LOG_TARGET, "OpenClEngine: created queue");
 
@@ -202,7 +201,7 @@ impl EngineImpl for OpenClEngine {
                         return Err(e.into());
                     },
                 };
-            match queue.enqueue_write_buffer(&mut buffer, CL_TRUE, 0, data, &[]) {
+            match queue.enqueue_write_buffer(&mut buffer, CL_FALSE, 0, data, &[]) {
                 Ok(_) => debug!(target: LOG_TARGET, "OpenClEngine: buffer created"),
                 Err(e) => {
                     error!(target: LOG_TARGET, "OpenClEngine: failed to enqueue write buffer: {}", e);
