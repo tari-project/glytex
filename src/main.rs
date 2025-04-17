@@ -3,6 +3,7 @@ use std::{
     env::current_dir,
     fs::{self, File},
     io::Write,
+    num,
     panic,
     path::{Path, PathBuf},
     process,
@@ -43,6 +44,7 @@ use tari_shutdown::{Shutdown, ShutdownSignal};
 use tari_utilities::epoch_time::EpochTime;
 use tokio::{
     runtime::Runtime,
+    signal,
     sync::{broadcast::Sender, RwLock},
     time::sleep,
 };
@@ -263,6 +265,7 @@ async fn main_inner() -> Result<(), anyhow::Error> {
     // http server
     let mut shutdown = Shutdown::new();
 
+    let signal = shutdown.to_signal();
     // just create the context to test if it can run
     if let Some(_detect) = cli.detect {
         let default_path = {
@@ -404,7 +407,6 @@ async fn main_inner() -> Result<(), anyhow::Error> {
         let mut prev_hashrate = 0;
 
         while true {
-            dbg!("here");
             let mut config = config.clone();
             config.single_grid_size = current_grid_size;
             // config.block_size = ;
@@ -417,8 +419,10 @@ async fn main_inner() -> Result<(), anyhow::Error> {
                 let c = config.clone();
                 let gpu = multi_engine_wrapper.clone();
                 let x = tx.clone();
+
+                let signal2 = signal.clone();
                 threads.push(thread::spawn(move || {
-                    run_thread(gpu, num_devices as u64, i as u32, c, true, x)
+                    run_thread(gpu, num_devices as u64, i as u32, c, true, x, signal2)
                 }));
             }
             let thread_len = threads.len();
@@ -512,7 +516,7 @@ async fn main_inner() -> Result<(), anyhow::Error> {
 
     if num_devices > 0 && !benchmark {
         let c = config.clone();
-        let s = shutdown.to_signal();
+        let s = signal.clone();
         threads.push(thread::spawn(move || {
             let runtime = Runtime::new().unwrap();
             runtime.block_on(async { run_template_height_watcher(c, s).await })
@@ -528,14 +532,29 @@ async fn main_inner() -> Result<(), anyhow::Error> {
             let c = config.clone();
             let gpu = multi_engine_wrapper.clone();
             let curr_stats_tx = stats_tx.clone();
+            let s = signal.clone();
             threads.push(thread::spawn(move || {
-                run_thread(gpu, num_devices as u64, i as u32, c, benchmark, curr_stats_tx)
+                run_thread(gpu, num_devices as u64, i as u32, c, benchmark, curr_stats_tx, s)
             }));
         }
     }
 
     let thread_len = threads.len();
     let mut thread_hashrate = Vec::with_capacity(thread_len);
+    if !benchmark {
+        'outer: loop {
+            for t in &threads {
+                // if any thread is finished, stop all of them
+                if t.is_finished() {
+                    println!("One job has finished, stopping others");
+                    shutdown.trigger();
+                    break 'outer;
+                }
+            }
+            sleep(std::time::Duration::from_millis(100)).await;
+        }
+    }
+    println!("Stopping all jobs");
     for t in threads {
         match t.join() {
             Ok(res) => match res {
@@ -552,9 +571,10 @@ async fn main_inner() -> Result<(), anyhow::Error> {
             },
         }
     }
+    println!("Threads finished successfully");
 
     // kill other threads
-    shutdown.trigger();
+    // shutdown.trigger();
     if thread_hashrate.len() == thread_len {
         let total_hashrate: u64 = thread_hashrate.iter().sum();
         warn!(target: LOG_TARGET, "Total hashrate: {}", total_hashrate.to_formatted_string(&Locale::en));
@@ -580,10 +600,16 @@ async fn run_template_height_watcher(config: ConfigFile, shutdown: ShutdownSigna
     let mut curr_hash = vec![];
     let mut curr_p2pool_hash = vec![];
     let mut last_template_time = Instant::now();
+    let mut num_failures = 0;
     // let mut curr_block_template = None;
 
     let timeout_dur = std::time::Duration::from_secs(config.template_timeout_secs);
     loop {
+        if num_failures > config.max_template_failures as u64 {
+            error!(target: LOG_TARGET, "Max template failures reached. Exiting.");
+            // This is a temporary hack to stop mining
+            return Err(anyhow!("Max template failures reached"));
+        }
         let mut must_refresh = false;
         if shutdown.is_triggered() {
             break;
@@ -598,13 +624,16 @@ async fn run_template_height_watcher(config: ConfigFile, shutdown: ShutdownSigna
             Ok(Ok(height_data)) => height_data,
             Ok(Err(e)) => {
                 error!(target: LOG_TARGET, "Error getting height: {:?}", e);
+                num_failures += 1;
                 continue;
             },
             Err(e) => {
                 error!(target: LOG_TARGET, "Timeout getting height: {:?}", e);
+                num_failures += 1;
                 continue;
             },
         };
+        num_failures = 0;
         if height_data.height > curr_node_height || height_data.tip_hash != curr_hash {
             info!(target: LOG_TARGET, "Tari chain changed. Dumping block template. New height:{}, old height:{}.", height_data.height, curr_node_height);
             must_refresh = true;
@@ -644,10 +673,12 @@ async fn run_template_height_watcher(config: ConfigFile, shutdown: ShutdownSigna
                 Ok(Ok(template)) => template,
                 Ok(Err(e)) => {
                     error!(target: LOG_TARGET, "Error getting block template: {:?}", e);
+                    num_failures += 1;
                     continue;
                 },
                 Err(e) => {
                     error!(target: LOG_TARGET, "Timeout getting block template: {:?}", e);
+                    num_failures += 1;
                     continue;
                 },
             };
@@ -678,6 +709,7 @@ fn run_thread(
     config: ConfigFile,
     benchmark: bool,
     stats_tx: Sender<HashrateSample>,
+    shutdown: ShutdownSignal,
 ) -> Result<u64, anyhow::Error> {
     let tari_node_url = config.tari_node_url.clone();
     let runtime = Runtime::new()?;
@@ -724,6 +756,9 @@ fn run_thread(
     // let mut data_buf = data.as_slice().as_dbuf()?;
 
     loop {
+        if shutdown.is_triggered() {
+            return Ok(0);
+        }
         rounds += 1;
 
         if rounds > 101 {
