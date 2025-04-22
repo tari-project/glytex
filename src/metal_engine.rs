@@ -70,6 +70,7 @@ impl MetalEngine {
 impl EngineImpl for MetalEngine {
     type Context = MetalContext;
     type Function = MetalFunction;
+    type Kernel = MetalKernel;
 
     fn init(&mut self) -> Result<(), anyhow::Error> {
         debug!(target: LOG_TARGET,"MetalEngine: Initializing");
@@ -82,6 +83,15 @@ impl EngineImpl for MetalEngine {
 
     fn num_devices(&self) -> Result<u32, anyhow::Error> {
         Ok(Device::all().len() as u32)
+    }
+
+
+    fn create_kernel(&self, function: &Self::Function) -> Result<Self::Kernel, anyhow::Error>{
+        let kernel = function
+        .program
+        .get_function("sha3", None)
+        .map_err(|error| anyhow::anyhow!("Failed to get function sha3: {:?}", error))?;
+        Ok(MetalKernel{ kernel })
     }
 
     fn detect_devices(&self) -> Result<Vec<GpuDevice>, anyhow::Error> {
@@ -145,9 +155,11 @@ impl EngineImpl for MetalEngine {
         Ok(MetalFunction { program: function })
     }
 
+
     fn mine(
         &self,
-        function: &Self::Function,
+        kernel: &Self::Kernel,
+        func: &Self::Function,
         context: &Self::Context,
         data: &[u64],
         min_difficulty: u64,
@@ -155,7 +167,8 @@ impl EngineImpl for MetalEngine {
         num_iterations: u32,
         block_size: u32,
         grid_size: u32,
-    ) -> Result<(Option<u64>, u32, u64), anyhow::Error> {
+    ) -> Result<(Option<u64>, u32, u64), anyhow::Error>
+{
         autoreleasepool(|| {
             let command_queue = context.context.new_command_queue();
 
@@ -165,12 +178,9 @@ impl EngineImpl for MetalEngine {
             let command_buffer = command_queue.new_command_buffer();
             let encoder = command_buffer.new_compute_command_encoder();
 
-            let kernel = function
-                .program
-                .get_function("sha3", None)
-                .map_err(|error| anyhow::anyhow!("Failed to get function sha3: {:?}", error))?;
+           
 
-            let pipeline_state = create_pipeline_state(&context.context, &kernel)?;
+            let pipeline_state = create_pipeline_state(&context.context, &kernel.kernel)?;
             encoder.set_compute_pipeline_state(&pipeline_state);
 
             debug!(target: LOG_TARGET,"Setting buffers for arguments");
@@ -324,3 +334,8 @@ fn create_program_from_source(context: &Device) -> Result<Library, anyhow::Error
 
     Ok(library)
 }
+
+pub struct MetalKernel {
+    kernel: Function
+}
+
