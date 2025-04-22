@@ -39,7 +39,7 @@ impl Default for ConfigFile {
             block_size: 896,
             single_grid_size: 1024,
             per_device_grid_sizes: vec![],
-            template_timeout_secs: 1,
+            template_timeout_secs: 3,
             max_template_failures: 10,
         }
     }
