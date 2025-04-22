@@ -608,6 +608,8 @@ async fn run_template_height_watcher(config: ConfigFile, shutdown: ShutdownSigna
 
     let timeout_dur = std::time::Duration::from_secs(config.template_timeout_secs);
     loop {
+        // Sleep first otherwise we call continue a lot
+        sleep(Duration::from_secs(config.height_check_secs)).await;
         if num_failures > config.max_template_failures as u64 {
             error!(target: LOG_TARGET, "Max template failures reached. Exiting.");
             // This is a temporary hack to stop mining
@@ -700,7 +702,6 @@ async fn run_template_height_watcher(config: ConfigFile, shutdown: ShutdownSigna
         // if height > curr_height.load(Ordering::SeqCst) {
         //     curr_height.store(height, Ordering::SeqCst);
         // }
-        sleep(Duration::from_secs(config.height_check_secs)).await;
     }
     Ok(0)
 }
