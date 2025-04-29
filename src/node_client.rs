@@ -8,6 +8,8 @@ use minotari_app_grpc::tari_rpc::{
     Block,
     Empty,
     GetNewBlockResult,
+    GetNewBlockTemplateWithCoinbasesRequest,
+    NewBlockCoinbase,
     NewBlockTemplate,
     NewBlockTemplateRequest,
     NewBlockTemplateResponse,
@@ -60,6 +62,7 @@ impl NodeClient for BaseNodeClientWrapper {
 
     async fn get_block_template(&mut self) -> Result<NewBlockTemplateResponse, anyhow::Error> {
         info!(target: LOG_TARGET, "Getting node block template");
+
         let res = self
             .client
             .get_new_block_template(tonic::Request::new({
@@ -76,9 +79,35 @@ impl NodeClient for BaseNodeClientWrapper {
     }
 
     async fn get_new_block(&mut self, template: NewBlockTemplate) -> Result<NewBlockResult, anyhow::Error> {
-        info!(target: LOG_TARGET, "Getting new block template");
-        let res = self.client.get_new_block(tonic::Request::new(template)).await?;
-        Ok(NewBlockResult::try_from(res.into_inner())?)
+        let debug_fill_blocks = true;
+        if debug_fill_blocks {
+            let mut coinbases = vec![];
+            for x in 0..1000 {
+                coinbases.push(NewBlockCoinbase {
+                    address:
+                        "f23V365vWe2Cc65dYEehRJKZDriHgtVF4noJ3mMAMdUwccwVu1xTko794ZUQJ8KgQQPJiHTwMoHmVPAMSptKtXTCQjk"
+                            .to_string(),
+                    value: rand::random::<u64>() + x,
+                    stealth_payment: false,
+                    revealed_value_proof: true,
+                    coinbase_extra: vec![0, 1, 2, 3, 4, 5],
+                });
+            }
+            let res = self
+                .client
+                .get_new_block_template_with_coinbases(GetNewBlockTemplateWithCoinbasesRequest {
+                    algo: Some(PowAlgo { pow_algo: 1 }),
+                    max_weight: 0,
+                    coinbases,
+                })
+                .await?;
+            info!(target: LOG_TARGET, "Done getting node block template with coinbases");
+            Ok(NewBlockResult::try_from(res.into_inner())?)
+        } else {
+            info!(target: LOG_TARGET, "Getting new block template");
+            let res = self.client.get_new_block(tonic::Request::new(template)).await?;
+            Ok(NewBlockResult::try_from(res.into_inner())?)
+        }
     }
 
     async fn submit_block(&mut self, block: Block) -> Result<(), anyhow::Error> {
