@@ -85,13 +85,12 @@ impl EngineImpl for MetalEngine {
         Ok(Device::all().len() as u32)
     }
 
-
-    fn create_kernel(&self, function: &Self::Function) -> Result<Self::Kernel, anyhow::Error>{
+    fn create_kernel(&self, function: &Self::Function) -> Result<Self::Kernel, anyhow::Error> {
         let kernel = function
-        .program
-        .get_function("sha3", None)
-        .map_err(|error| anyhow::anyhow!("Failed to get function sha3: {:?}", error))?;
-        Ok(MetalKernel{ kernel })
+            .program
+            .get_function("sha3", None)
+            .map_err(|error| anyhow::anyhow!("Failed to get function sha3: {:?}", error))?;
+        Ok(MetalKernel { kernel })
     }
 
     fn detect_devices(&self) -> Result<Vec<GpuDevice>, anyhow::Error> {
@@ -155,7 +154,6 @@ impl EngineImpl for MetalEngine {
         Ok(MetalFunction { program: function })
     }
 
-
     fn mine(
         &self,
         kernel: &Self::Kernel,
@@ -167,8 +165,7 @@ impl EngineImpl for MetalEngine {
         num_iterations: u32,
         block_size: u32,
         grid_size: u32,
-    ) -> Result<(Option<u64>, u32, u64), anyhow::Error>
-{
+    ) -> Result<(Option<u64>, u32, u64), anyhow::Error> {
         autoreleasepool(|| {
             let command_queue = context.context.new_command_queue();
 
@@ -177,8 +174,6 @@ impl EngineImpl for MetalEngine {
 
             let command_buffer = command_queue.new_command_buffer();
             let encoder = command_buffer.new_compute_command_encoder();
-
-           
 
             let pipeline_state = create_pipeline_state(&context.context, &kernel.kernel)?;
             encoder.set_compute_pipeline_state(&pipeline_state);
@@ -336,6 +331,5 @@ fn create_program_from_source(context: &Device) -> Result<Library, anyhow::Error
 }
 
 pub struct MetalKernel {
-    kernel: Function
+    kernel: Function,
 }
-
