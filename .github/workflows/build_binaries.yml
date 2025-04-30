@@ -66,6 +66,7 @@ jobs:
           AinputJQ=(
             '{"tari_network": "esme","tari_target_network": "testnet"}'
             '{"tari_network": "nextnet","tari_target_network": "nextnet"}'
+            '{"tari_network": "mainnet","tari_target_network": "mainnet"}'
           )
           echo ${AinputJQ[@]}
           echo ${matrix_selection} | jq -s -c > matrix-temp.json
