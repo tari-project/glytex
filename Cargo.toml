@@ -5,18 +5,19 @@ edition = "2021"
 
 [dependencies]
 clap = { version = "4.5.0", features = ["derive"] }
-minotari_app_grpc = { git = "https://github.com/tari-project/tari" }
+minotari_app_grpc = { git = "https://github.com/tari-project/tari", tag = "v1.17.0-rc.1" }
 num-format = "0.4.4"
 serde = { version = "1.0.130", features = ["derive"] }
 serde_json = "1.0.68"
 
-tari_common = { git = "https://github.com/tari-project/tari" }
-tari_common_types = { git = "https://github.com/tari-project/tari" }
-tari_core = { git = "https://github.com/tari-project/tari", default-features = false, features = [
+tari_common = { git = "https://github.com/tari-project/tari", tag = "v1.17.0-rc.1" }
+tari_common_types = { git = "https://github.com/tari-project/tari", tag = "v1.17.0-rc.1" }
+tari_core = { git = "https://github.com/tari-project/tari", tag = "v1.17.0-rc.1", default-features = false, features = [
   "transactions",
+  "base_node"
 ] }
 
-tari_shutdown = { git = "https://github.com/tari-project/tari.git" }
+tari_shutdown = { git = "https://github.com/tari-project/tari.git", tag = "v1.17.0-rc.1" }
 tari_utilities = "0.8"
 
 libsqlite3-sys = { version = "0.25.1", features = ["bundled"] }
