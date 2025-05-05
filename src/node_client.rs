@@ -82,22 +82,30 @@ impl NodeClient for BaseNodeClientWrapper {
         let debug_fill_blocks = true;
         if debug_fill_blocks {
             let mut coinbases = vec![];
-            for x in 0..1000 {
-                coinbases.push(NewBlockCoinbase {
-                    address:
-                        "f23V365vWe2Cc65dYEehRJKZDriHgtVF4noJ3mMAMdUwccwVu1xTko794ZUQJ8KgQQPJiHTwMoHmVPAMSptKtXTCQjk"
-                            .to_string(),
-                    value: rand::random::<u64>() + x,
-                    stealth_payment: false,
-                    revealed_value_proof: true,
-                    coinbase_extra: vec![0, 1, 2, 3, 4, 5],
-                });
-            }
+            // for x in 0..999 {
+            //     coinbases.push(NewBlockCoinbase {
+            //         address:
+            //             "32DvxABBrRzGeWj8jWSpPfCefnM6KSEqCsfRDnimLZiJK4Cz8suwicHhtoRT5KG6aJoEHYZ8xwrXqAbdS44wLLVVU8m"
+            //                 .to_string(),
+            //         value: (rand::random::<u64>() % 100) + x,
+            //         stealth_payment: false,
+            //         revealed_value_proof: true,
+            //         coinbase_extra: vec![0, 1, 2, 3, 4, 5],
+            //     });
+            // }
+            coinbases.push(NewBlockCoinbase {
+                address: "32DvxABBrRzGeWj8jWSpPfCefnM6KSEqCsfRDnimLZiJK4Cz8suwicHhtoRT5KG6aJoEHYZ8xwrXqAbdS44wLLVVU8m"
+                    .to_string(),
+                value: 50,
+                stealth_payment: false,
+                revealed_value_proof: true,
+                coinbase_extra: vec![0, 1, 2, 3, 4, 5],
+            });
             let res = self
                 .client
                 .get_new_block_template_with_coinbases(GetNewBlockTemplateWithCoinbasesRequest {
                     algo: Some(PowAlgo { pow_algo: 1 }),
-                    max_weight: 0,
+                    max_weight: 100,
                     coinbases,
                 })
                 .await?;
