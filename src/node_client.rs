@@ -13,6 +13,7 @@ use minotari_app_grpc::tari_rpc::{
     NewBlockTemplateResponse,
     PowAlgo,
 };
+use tari_common::MAX_GRPC_MESSAGE_SIZE;
 use tari_common_types::{tari_address::TariAddress, types::FixedHash};
 use tonic::{async_trait, transport::Channel};
 
@@ -33,7 +34,11 @@ impl BaseNodeClientWrapper {
             match BaseNodeClient::connect(url.to_string()).await {
                 Ok(res_client) => {
                     info!(target: LOG_TARGET, "Connected successfully");
-                    client = Some(res_client)
+                    client = Some(
+                        res_client
+                            .max_decoding_message_size(MAX_GRPC_MESSAGE_SIZE)
+                            .max_encoding_message_size(MAX_GRPC_MESSAGE_SIZE),
+                    )
                 },
                 Err(error) => {
                     error!(target: LOG_TARGET,"Failed to connect to base node: {:?}", error);
