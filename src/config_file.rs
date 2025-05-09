@@ -30,7 +30,7 @@ impl Default for ConfigFile {
         Self {
             tari_address: "f2CWXg4GRNXweuDknxLATNjeX8GyJyQp9GbVG8f81q63hC7eLJ4ZR8cDd9HBcVTjzoHYUtzWZFM3yrZ68btM2wiY7sj"
                 .to_string(),
-            tari_node_url: "http://127.0.0.1:18142".to_string(),
+            tari_node_url: "http://127.0.0.1:18102".to_string(),
             coinbase_extra: "tari_gpu_miner".to_string(),
             template_refresh_secs: 30,
             height_check_secs: 1,
