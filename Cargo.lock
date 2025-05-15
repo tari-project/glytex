@@ -1424,6 +1424,7 @@ dependencies = [
  "axum",
  "clap 4.5.28",
  "cust",
+ "hex",
  "libsqlite3-sys",
  "log",
  "log4rs",

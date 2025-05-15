@@ -29,6 +29,7 @@ use minotari_app_grpc::{
     tari_rpc::{Block, BlockHeader as grpc_header, NewBlockTemplate, TransactionOutput as GrpcTransactionOutput},
 };
 use multi_engine_wrapper::{EngineType, MultiEngineWrapper};
+use node_client::{create_job_client, Job};
 use num_format::{Locale, ToFormattedString};
 use tari_common::configuration::Network;
 use tari_common_types::{tari_address::TariAddress, types::FixedHash};
@@ -185,6 +186,9 @@ struct Cli {
     /// P2Pool enabled
     #[arg(long)]
     p2pool_enabled: bool,
+
+    #[arg(long, alias = "stratum")]
+    stratum_enabled: bool,
 
     /// Enable/disable http server
     ///
@@ -350,6 +354,10 @@ async fn main_inner() -> Result<(), anyhow::Error> {
     if cli.p2pool_enabled {
         config.p2pool_enabled = true;
     }
+    if cli.stratum_enabled {
+        config.use_stratum = true;
+    }
+
     if let Some(enabled) = cli.http_server_enabled {
         config.http_server_enabled = enabled;
     }
@@ -526,7 +534,7 @@ async fn main_inner() -> Result<(), anyhow::Error> {
 
     info!(target: LOG_TARGET, "Starting template height watcher");
 
-    if num_devices > 0 && !benchmark {
+    if num_devices > 0 && !benchmark && !config.use_stratum {
         let c = config.clone();
         let s = signal.clone();
         threads.push(thread::spawn(move || {
@@ -726,19 +734,8 @@ fn run_thread(
 ) -> Result<u64, anyhow::Error> {
     let fixed_num_iterations = config.iterations_per_cycle;
     let tari_node_url = config.tari_node_url.clone();
-    let runtime = Runtime::new()?;
-    let client_type = if benchmark {
-        ClientType::Benchmark
-    } else if config.p2pool_enabled {
-        ClientType::P2Pool(TariAddress::from_str(config.tari_address.as_str())?)
-    } else {
-        ClientType::BaseNode
-    };
-    let mut template_fetch_failures = 0;
-    let coinbase_extra = config.coinbase_extra.clone();
-    let node_client = Arc::new(RwLock::new(runtime.block_on(async move {
-        node_client::create_client(client_type, &tari_node_url, coinbase_extra).await
-    })?));
+    let job_client = create_job_client(&config)?;
+
     let mut rounds = 0;
     let running_time = Instant::now();
 
@@ -783,29 +780,13 @@ fn run_thread(
         if rounds > 101 {
             rounds = 0;
         }
-        let clone_node_client = node_client.clone();
-        let clone_config = config.clone();
-        let target_difficulty: u64;
-        let block: Block;
-        let mut header: BlockHeader;
-        let mining_hash: FixedHash;
-        match runtime.block_on(async move { get_template(benchmark).await }) {
-            Some(res) => {
-                // template_fetch_failures = 0;
-                // info!(target: LOG_TARGET, "Getting next block...");
-                // println!("Getting next block...{}", res_header.height);
-                target_difficulty = res.target_difficulty;
-                block = res.block;
-                header = res.header;
-                mining_hash = res.mining_hash;
-                // previous_template = Some((target_difficulty, block.clone(), header.clone(), mining_hash.clone()));
-            },
-            None => {
-                info!(target: LOG_TARGET, "Waiting for template to be populated");
-                thread::sleep(std::time::Duration::from_secs(1));
-                continue;
-            },
-        }
+
+        let Job {
+            mining_hash,
+            target_difficulty,
+            job_id,
+            mut nonce_start,
+        } = job_client.get_job()?;
 
         let hash64 = copy_u8_to_u64(mining_hash.to_vec());
         data[0] = 0;
@@ -817,7 +798,7 @@ fn run_thread(
         // data_buf.copy_from(&data).expect("Could not copy data to buffer");
         // output_buf.copy_from(&output).expect("Could not copy output to buffer");
 
-        let mut nonce_start = (u64::MAX / num_threads) * thread_index as u64;
+        // let mut nonce_start = (u64::MAX / num_threads) * thread_index as u64;
         let first_nonce = nonce_start;
         let elapsed = Instant::now();
         let mut max_diff = 0;
@@ -874,9 +855,9 @@ fn run_thread(
                     return Err(e.into());
                 },
             };
-            if let Some(ref n) = nonce {
-                header.nonce = *n;
-            }
+            // if let Some(ref n) = nonce {
+            //     header.nonce = *n;
+            // }
             if diff > max_diff {
                 max_diff = diff;
             }
@@ -913,30 +894,8 @@ fn run_thread(
                 }
             }
             debug!(target: LOG_TARGET, "Inside loop nonce {:?}", nonce.clone().is_some());
-            if nonce.is_some() {
-                debug!(target: LOG_TARGET, "Inside loop nonce is some {:?}", nonce.clone().is_some());
-                header.nonce = nonce.unwrap();
-
-                let mut mined_block = block.clone();
-                mined_block.header = Some(grpc_header::from(header));
-                let clone_client = node_client.clone();
-                match runtime.block_on(async {
-                    let mut client = clone_client.write().await;
-                    tokio::time::timeout(
-                        std::time::Duration::from_secs(config.template_timeout_secs),
-                        client.submit_block(mined_block),
-                    )
-                    .await?
-                }) {
-                    Ok(_) => {
-                        // stats_store.inc_accepted_blocks();
-                        println!("Block submitted");
-                    },
-                    Err(e) => {
-                        // stats_store.inc_rejected_blocks();
-                        println!("Error submitting block: {:?}", e);
-                    },
-                }
+            if let Some(n) = nonce {
+                job_client.submit(job_id, n);
                 break;
             }
             debug!(target: LOG_TARGET, "Inside thread loop break {:?}", num_threads);
