@@ -769,7 +769,7 @@ fn run_thread(
     let mut data = vec![0u64; 6];
     // let mut data_buf = data.as_slice().as_dbuf()?;
 
-    let mut num_iterations = 4;
+    let mut num_iterations = 1;
     if let Some(fixed_num_iterations) = fixed_num_iterations {
         info!(target: LOG_TARGET, "Using fixed num iterations: {}", fixed_num_iterations);
         num_iterations = fixed_num_iterations;
@@ -853,13 +853,13 @@ fn run_thread(
                             * data_buf.as_device_ptr(),
                             * &output_buf, */
             );
-            if fixed_num_iterations.is_none() {
-                if mining_time.elapsed().as_secs() > 1500 {
-                    num_iterations = cmp::max(1, num_iterations - 1);
-                } else if mining_time.elapsed().as_millis() < 1000 {
-                    num_iterations = num_iterations + 1;
-                }
-            }
+            // if fixed_num_iterations.is_none() {
+            //     if mining_time.elapsed().as_secs() > 1500 {
+            //         num_iterations = cmp::max(1, num_iterations - 1);
+            //     } else if mining_time.elapsed().as_millis() < 1000 {
+            //         num_iterations = num_iterations + 1;
+            //     }
+            // }
             let (nonce, hashes, diff) = match result {
                 Ok(values) => {
                     debug!(target: LOG_TARGET,

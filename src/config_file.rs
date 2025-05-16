@@ -42,7 +42,7 @@ impl Default for ConfigFile {
             per_device_grid_sizes: vec![],
             template_timeout_secs: 3,
             max_template_failures: 10,
-            iterations_per_cycle: None,
+            iterations_per_cycle: Some(1),
         }
     }
 }
