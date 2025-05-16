@@ -272,6 +272,7 @@ impl NodeClient for BenchmarkNodeClient {
 
 pub(crate) struct Job {
     pub target_difficulty: u64,
+    pub inverted_difficulty: u64,
     pub mining_hash: FixedHash,
     pub job_id: String,
     pub nonce_start: u64,
@@ -287,6 +288,7 @@ pub(crate) struct NodeJobClient {}
 impl JobClient for NodeJobClient {
     fn get_job(&self) -> Result<Job, anyhow::Error> {
         // (u64::MAX / num_threads) * thread_index as u64;
+        /// targetdif = (u64::MAX / (target_difficulty)).to_le(),
         todo!()
     }
 
@@ -380,6 +382,7 @@ impl JobClient for NicehashStratumClient {
             let job_value = serde_json::from_str::<serde_json::Value>(&line);
             let mut job = Job {
                 target_difficulty: 0,
+                inverted_difficulty: 0,
                 mining_hash: FixedHash::zero(),
                 job_id: String::new(),
                 nonce_start: 0,
@@ -395,9 +398,12 @@ impl JobClient for NicehashStratumClient {
                     if let Some(j) = res.get("job") {
                         if let Some(target_difficulty) = j.get("target") {
                             let hex = target_difficulty.as_str().unwrap();
-                            let target_u64 = u64::from_str_radix(hex, 16).unwrap();
+                            let mut target_u64 = u64::from_str_radix(hex, 16).unwrap();
 
-                            job.target_difficulty = target_u64;
+                            // target_u64 = u64::from_le(target_u64);
+
+                            job.inverted_difficulty = target_u64;
+                            job.target_difficulty = u64::MAX / target_u64;
                         }
                         if let Some(mining_hash) = j.get("blob") {
                             let hex = mining_hash.as_str().unwrap();

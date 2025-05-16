@@ -98,9 +98,10 @@ impl EngineImpl for OpenClEngine {
                     status: GpuStatus {
                         max_grid_size: dev.max_work_group_size().unwrap_or_default() as u32,
                         recommended_grid_size: 0,
-                        recommended_block_size: 0,
+                        recommended_block_size: dev.max_compute_units().unwrap_or_default() as u32 * 64,
                     },
                 };
+
                 if let Ok(context) = self
                     .create_context(u32::try_from(id).unwrap())
                     .inspect_err(|e| error!(target: LOG_TARGET, "Could not create context {:?}", e))
@@ -111,7 +112,7 @@ impl EngineImpl for OpenClEngine {
                     {
                         if let Ok((grid, block)) = func.suggested_launch_configuration(&dev) {
                             gpu.status.recommended_grid_size = grid;
-                            gpu.status.recommended_block_size = block;
+                            // gpu.status.recommended_block_size = block;
                         }
                         gpu_devices.push(gpu);
                         total_devices += 1;
@@ -234,7 +235,7 @@ impl EngineImpl for OpenClEngine {
             .set_arg(&min_difficulty)
             .set_arg(&num_iterations)
             .set_arg(&output_buffer)
-
+            // Work size * compute units * 64 on AMD, 32 on NVIDIA
             .set_global_work_size((grid_size * block_size) as usize)
             // .set_local_work_size(grid_size as usize)
             // .set_wait_event(&y_write_event)

@@ -1,3 +1,4 @@
+use core::hash;
 use std::{
     cmp,
     convert::TryInto,
@@ -748,11 +749,12 @@ fn run_thread(
     //    .context("get suggest config")?;
     // let (grid_size, block_size) = (23, 50);
     let block_size = config.block_size;
-    let grid_size = if config.per_device_grid_sizes.is_empty() {
+    let mut grid_size = if config.per_device_grid_sizes.is_empty() {
         config.single_grid_size
     } else {
         config.per_device_grid_sizes[thread_index as usize]
     };
+    let lowest_grid_size = grid_size;
     // grid_size =
     //    (grid_size as f64 / 1000f64 * cmp::max(cmp::min(100, config.gpu_percentage as usize), 1) as f64).round() as
     // u32; let (mut grid_size, block_size) = gpu_function
@@ -766,11 +768,11 @@ fn run_thread(
     let mut data = vec![0u64; 6];
     // let mut data_buf = data.as_slice().as_dbuf()?;
 
-    let mut num_iterations = 1;
-    if let Some(fixed_num_iterations) = fixed_num_iterations {
-        info!(target: LOG_TARGET, "Using fixed num iterations: {}", fixed_num_iterations);
-        num_iterations = fixed_num_iterations;
-    }
+    let mut num_iterations = 4;
+    // if let Some(fixed_num_iterations) = fixed_num_iterations {
+    //     info!(target: LOG_TARGET, "Using fixed num iterations: {}", fixed_num_iterations);
+    //     num_iterations = fixed_num_iterations;
+    // }
     loop {
         if shutdown.is_triggered() {
             return Ok(0);
@@ -784,6 +786,7 @@ fn run_thread(
         let Job {
             mining_hash,
             target_difficulty,
+            inverted_difficulty,
             job_id,
             mut nonce_start,
         } = job_client.get_job()?;
@@ -805,9 +808,15 @@ fn run_thread(
         let mut last_printed = Instant::now();
         let mut last_reported_stats = Instant::now();
         let kernel = gpu_engine.create_kernel(&gpu_function)?;
+        let mut last_hashrate = 0;
+        let mut best_grid_size = grid_size;
         loop {
+            let hash_rate = if elapsed.elapsed().as_secs() > 0 {
+                (nonce_start - first_nonce) / cmp::max(1, elapsed.elapsed().as_secs())
+            } else {
+                0
+            };
             if running_time.elapsed() > Duration::from_secs(10) && benchmark {
-                let hash_rate = (nonce_start - first_nonce) / elapsed.elapsed().as_secs();
                 return Ok(hash_rate);
             }
             debug!(target: LOG_TARGET, "Inside loop");
@@ -821,7 +830,9 @@ fn run_thread(
                 &gpu_function,
                 &context,
                 &data,
-                (u64::MAX / (target_difficulty)).to_le(),
+                inverted_difficulty,
+                // (u64::MAX / (target_difficulty)).to_le(),
+                // target_difficulty,
                 nonce_start,
                 num_iterations,
                 block_size,
@@ -835,11 +846,23 @@ fn run_thread(
                             * &output_buf, */
             );
             // if fixed_num_iterations.is_none() {
-            //     if mining_time.elapsed().as_secs() > 1500 {
-            //         num_iterations = cmp::max(1, num_iterations - 1);
-            //     } else if mining_time.elapsed().as_millis() < 1000 {
-            //         num_iterations = num_iterations + 1;
-            //     }
+            if mining_time.elapsed().as_millis() > 10 {
+                num_iterations = cmp::max(1, num_iterations - 1);
+                // grid_size = cmp::max(256, grid_size / 2);
+            } else if mining_time.elapsed().as_millis() < 9 {
+                num_iterations = num_iterations + 1;
+                // grid_size = grid_size * 2;
+            }
+
+            // if (hash_rate as f64) < (last_hashrate as f64 * 0.8f64) {
+            //     last_hashrate = hash_rate;
+            //     grid_size = cmp::max(lowest_grid_size, grid_size / 2);
+            // }
+            // if (hash_rate as f64) > (last_hashrate as f64 * 1.1f64) {
+            //     // keep doubling
+            //     last_hashrate = hash_rate;
+            //     grid_size = grid_size + 256;
+            // }
             // }
             let (nonce, hashes, diff) = match result {
                 Ok(values) => {
@@ -876,10 +899,12 @@ fn run_thread(
                 if Instant::now() - last_printed > std::time::Duration::from_secs(2) {
                     last_printed = Instant::now();
                     println!(
-                        "[Thread:{}] total {:} grid: {} max_diff: {}, target: {} hashes/sec: {}",
+                        "[Thread:{}] total {:} grid: {} block: {} iter: {} max_diff: {}, target: {} hashes/sec: {}",
                         thread_index,
                         nonce_start.to_formatted_string(&Locale::en),
                         grid_size,
+                        block_size,
+                        num_iterations,
                         max_diff.to_formatted_string(&Locale::en),
                         target_difficulty.to_formatted_string(&Locale::en),
                         hash_rate.to_formatted_string(&Locale::en)
