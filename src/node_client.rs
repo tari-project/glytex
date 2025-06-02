@@ -18,7 +18,7 @@ use minotari_app_grpc::tari_rpc::{
     PowAlgo,
 };
 use serde_json::json;
-use tari_common::MAX_GRPC_MESSAGE_SIZE;
+use tari_common::{configuration::bootstrap::prompt, MAX_GRPC_MESSAGE_SIZE};
 use tari_common_types::{tari_address::TariAddress, types::FixedHash};
 use tonic::{async_trait, transport::Channel};
 
@@ -275,12 +275,13 @@ pub(crate) struct Job {
     pub inverted_difficulty: u64,
     pub mining_hash: FixedHash,
     pub job_id: String,
+    pub other_id: String,
     pub nonce_start: u64,
 }
 
 pub(crate) trait JobClient {
     fn get_job(&self) -> Result<Job, anyhow::Error>;
-    fn submit(&self, job_id: String, nonce: u64) -> Result<(), anyhow::Error>;
+    fn submit(&self, other_id: String, job_id: String, nonce: u64, result: Vec<u8>) -> Result<(), anyhow::Error>;
 }
 
 pub(crate) struct NodeJobClient {}
@@ -292,7 +293,7 @@ impl JobClient for NodeJobClient {
         todo!()
     }
 
-    fn submit(&self, job_id: String, nonce: u64) -> Result<(), anyhow::Error> {
+    fn submit(&self, other_id: String, job_id: String, nonce: u64, result: Vec<u8>) -> Result<(), anyhow::Error> {
         // header.nonce = nonce.unwrap();
 
         // let mut mined_block = block.clone();
@@ -375,12 +376,27 @@ impl JobClient for NicehashStratumClient {
         .to_string() +
             "\n";
         writer.write_all(msg.as_bytes())?;
+
+        // [2025-05-12T15:18:49.141921900+00:00]
+        // {"id":1,"jsonrpc":"2.0","result":{"id":"17ab37ddeac71e66","job":{"algo":"sha3x","blob":"
+        // 9eb9ca378167e41fbfac62c4f0c42509beb8115cbdf692d95c2e962face495fd","height":4911,"job_id":"a304c62e071aa395","
+        // target":"f0bffe0a00000000","xn":"4e7c"},"status":"OK"}}
+
+        // [2025-05-12T15:19:02.349103300+00:00]
+        // {"id":10,"jsonrpc":"2.0","method":"submit","params":{"id":"17ab37ddeac71e66","job_id":"a304c62e071aa395","
+        // nonce":"4e7c132263077f46","result":"00000000047f9bd541f8916a6c0d0cab9c673be0f4b0f70bdb4f2e217dd92725"}}
         for line in reader.lines() {
             let line = line?;
             println!("<< {}", line);
 
+            // let line =
+            // r#"{"id":1,"jsonrpc":"2.0","result":{"id":"17ab37ddeac71e66","job":{"algo":"sha3x","blob":"
+            // 9eb9ca378167e41fbfac62c4f0c42509beb8115cbdf692d95c2e962face495fd","height":4911,"job_id":"
+            // a304c62e071aa395","target":"f0bffe0a00000000","xn":"4e7c"},"status":"OK"}}"#;
             let job_value = serde_json::from_str::<serde_json::Value>(&line);
+            // let job = serde_json::from_str::<serde_json::Value>(&line);
             let mut job = Job {
+                other_id: String::new(),
                 target_difficulty: 0,
                 inverted_difficulty: 0,
                 mining_hash: FixedHash::zero(),
@@ -389,19 +405,30 @@ impl JobClient for NicehashStratumClient {
             };
             if let Ok(job_value) = job_value {
                 if let Some(res) = job_value.get("result") {
-                    let id = job_value.get("id");
-                    job.job_id = id
+                    let id = res.get("id");
+                    job.other_id = id
                         .unwrap_or(&serde_json::Value::Null)
                         .as_str()
                         .unwrap_or("")
                         .to_string();
+                    // job.job_id = id
+                    //     .unwrap_or(&serde_json::Value::Null)
+                    //     .as_str()
+                    //     .unwrap_or("")
+                    //     .to_string();
                     if let Some(j) = res.get("job") {
+                        if let Some(job_id) = j.get("job_id") {
+                            job.job_id = job_id.as_str().unwrap().to_string();
+                        }
                         if let Some(target_difficulty) = j.get("target") {
                             let hex = target_difficulty.as_str().unwrap();
                             let mut target_u64 = u64::from_str_radix(hex, 16).unwrap();
 
-                            // target_u64 = u64::from_le(target_u64);
+                            println!("{}", target_u64);
+                            target_u64 = u64::from_be(target_u64);
 
+                            println!("{}", target_u64);
+                            // let target_u64 = target_u64 * 100;
                             job.inverted_difficulty = target_u64;
                             job.target_difficulty = u64::MAX / target_u64;
                         }
@@ -415,9 +442,13 @@ impl JobClient for NicehashStratumClient {
                             let hex = nonce_start.as_str().unwrap();
                             let nonce_start = u16::from_str_radix(hex, 16).unwrap();
                             let nonce_start = u64::from(nonce_start);
-                            let nonce_start = nonce_start << 16;
+                            let nonce_start = nonce_start << 48;
+                            let nonce_start = u64::from_be(nonce_start);
+                            println!("{:#018x}", nonce_start);
 
                             job.nonce_start = nonce_start;
+                            // job.nonce_start = u64::from_str_radix("4e7c132263077f00", 16).unwrap();
+                            // println!("{:#018x}", job.nonce_start);
                         }
                     }
                 }
@@ -430,7 +461,40 @@ impl JobClient for NicehashStratumClient {
         todo!()
     }
 
-    fn submit(&self, job_id: String, nonce: u64) -> Result<(), anyhow::Error> {
-        todo!()
+    fn submit(&self, other_id: String, job_id: String, nonce: u64, result: Vec<u8>) -> Result<(), anyhow::Error> {
+        let tcp_stream = TcpStream::connect(&self.url)?;
+        let mut writer = tcp_stream.try_clone().unwrap();
+        let mut reader = BufReader::new(tcp_stream.try_clone().unwrap());
+        let msg = json!({
+            "id": 10,
+            "jsonrpc": "2.0",
+            "method": "submit",
+            "params": {
+                "id": other_id,
+                "job_id": job_id,
+                "nonce": format!("{:x}", u64::from_be(nonce)),
+                "result": hex::encode(result),
+            }
+        })
+        .to_string() +
+            "\n";
+
+        println!(">> {}", msg);
+        println!("===========================================================================");
+        println!("==== Summiting block ====================================================");
+        println!("===========================================================================");
+        println!("===========================================================================");
+        println!("===========================================================================");
+        println!("===========================================================================");
+        println!("===========================================================================");
+        println!("===========================================================================");
+        println!("===========================================================================");
+        writer.write_all(msg.as_bytes())?;
+        for line in reader.lines() {
+            let line = line?;
+            println!("<< {}", line);
+            return Ok(());
+        }
+        Ok(())
     }
 }

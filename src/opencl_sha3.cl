@@ -39,7 +39,7 @@ kernel void sha3(global ulong *buffer, ulong nonce_start, ulong difficulty,
     for (uint j = 0; j < 25; j++) {
       state[j] = 0;
     }
-    state[0] = nonce_start + get_global_id(0) + i * get_global_size(0);
+    state[0] = nonce_start  | ((get_global_id(0) + i * get_global_size(0))<<16);
     state[1] = buffer[1];
     state[2] = buffer[2];
     state[3] = buffer[3];
@@ -150,8 +150,11 @@ kernel void sha3(global ulong *buffer, ulong nonce_start, ulong difficulty,
     barrier(CLK_GLOBAL_MEM_FENCE);
     if (swap < difficulty) {
       if (output_1[1] == 0 || output_1[1] > swap) {
-        output_1[0] = nonce_start + get_global_id(0) + i * get_global_size(0);
+        output_1[0] = nonce_start |  ((get_global_id(0) + i * get_global_size(0))<<16) ;
         output_1[1] = swap;
+        output_1[2] = state[1];
+        output_1[3] = state[2];
+        output_1[4] = state[3];
       }
     } else {
       if (output_1[1] == 0 || output_1[1] > swap) {

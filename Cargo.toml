@@ -32,6 +32,9 @@ metal = { version = "0.31.0", optional = true }
 anyhow = "1.0.95"
 hex = "*"
 
+#[dev-dependencies]
+sha3 = "*"
+
 [features]
 default = []
 nvidia = ["dep:cust"]

@@ -33,7 +33,7 @@ impl Default for ConfigFile {
                 .to_string(),
             tari_node_url: "http://127.0.0.1:18142".to_string(),
             coinbase_extra: "tari_gpu_miner".to_string(),
-            template_refresh_secs: 30,
+            template_refresh_secs: 6,
             height_check_secs: 1,
             p2pool_enabled: false,
             http_server_enabled: true,

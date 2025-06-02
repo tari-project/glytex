@@ -280,7 +280,7 @@ impl EngineImpl for MultiEngineWrapper {
         num_iterations: u32,
         block_size: u32,
         grid_size: u32,
-    ) -> Result<(Option<u64>, u32, u64), anyhow::Error> {
+    ) -> Result<(Option<u64>, u32, u64, Vec<u8>), anyhow::Error> {
         match self.selected_engine {
             #[cfg(feature = "nvidia")]
             EngineType::Cuda => self.cuda_engine.mine(

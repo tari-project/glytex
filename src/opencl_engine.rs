@@ -169,9 +169,7 @@ impl EngineImpl for OpenClEngine {
         num_iterations: u32,
         block_size: u32,
         grid_size: u32,
-    ) -> Result<(Option<u64>, u32, u64), Error> {
-        // TODO: put in multiple threads
-
+    ) -> Result<(Option<u64>, u32, u64, Vec<u8>), Error> {
         let kernels = vec![&kernel.kernel];
 
         //  let queue = CommandQueue::create_default_with_properties(
@@ -211,11 +209,11 @@ impl EngineImpl for OpenClEngine {
             };
 
             debug!(target: LOG_TARGET, "OpenClEngine: buffer created",);
-            let initial_output = vec![0u64, 0u64];
+            let initial_output = vec![0u64, 0u64, 0u64, 0u64, 0u64];
             let output_buffer = match Buffer::<cl_ulong>::create(
                 &context.context,
                 CL_MEM_WRITE_ONLY | CL_MEM_COPY_HOST_PTR,
-                2,
+                5,
                 initial_output.as_ptr() as *mut c_void,
             ) {
                 Ok(buffer) => buffer,
@@ -263,23 +261,36 @@ impl EngineImpl for OpenClEngine {
             }
             queue.finish()?;
 
-            let mut output = vec![0u64, 0u64];
+            let mut output = vec![0u64, 0u64, 0u64, 0u64, 0u64];
             queue.enqueue_read_buffer(&output_buffer, CL_TRUE, 0, output.as_mut_slice(), &[])?;
             if output[0] > 0 {
                 println!("output and diff {:?} {:?}", output[0], u64::MAX / output[1]);
+                let mut result = vec![0u8; 32];
+
+                result[0..8].copy_from_slice(&output[1].to_be_bytes());
+                result[8..16].copy_from_slice(&output[2].to_le_bytes());
+                result[16..24].copy_from_slice(&output[3].to_le_bytes());
+                result[24..32].copy_from_slice(&output[4].to_le_bytes());
+
                 return Ok((
                     Some(output[0]),
                     grid_size * block_size * num_iterations,
-                    u64::MAX / output[1],
+                    if output[1] > 0 { u64::MAX / output[1] } else { 0 },
+                    result,
                 ));
             }
             // if output[1] == 0 {
             //     return Ok((None, grid_size * block_size * num_iterations, 0));
             // }
-            return Ok((None, grid_size * block_size * num_iterations, u64::MAX / output[1]));
+            return Ok((
+                None,
+                grid_size * block_size * num_iterations,
+                if output[1] == 0 { 0 } else {u64::MAX / output[1]},
+                vec![],
+            ));
         }
         debug!(target: LOG_TARGET, "OpenClEngine: mine return ok");
-        Ok((None, grid_size * block_size * num_iterations, 0))
+        Ok((None, grid_size * block_size * num_iterations, 0, vec![]))
     }
 }
 fn create_program_from_source(context: &Context) -> Option<Program> {

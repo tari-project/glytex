@@ -37,5 +37,5 @@ pub trait EngineImpl {
         num_iterations: u32,
         block_size: u32,
         grid_size: u32,
-    ) -> Result<(Option<u64>, u32, u64), anyhow::Error>;
+    ) -> Result<(Option<u64>, u32, u64, Vec<u8>), anyhow::Error>;
 }

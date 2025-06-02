@@ -788,6 +788,7 @@ fn run_thread(
             target_difficulty,
             inverted_difficulty,
             job_id,
+            other_id,
             mut nonce_start,
         } = job_client.get_job()?;
 
@@ -830,8 +831,8 @@ fn run_thread(
                 &gpu_function,
                 &context,
                 &data,
-                inverted_difficulty,
-                // (u64::MAX / (target_difficulty)).to_le(),
+                // inverted_difficulty,
+                (u64::MAX / (target_difficulty)).to_le(),
                 // target_difficulty,
                 nonce_start,
                 num_iterations,
@@ -864,13 +865,13 @@ fn run_thread(
             //     grid_size = grid_size + 256;
             // }
             // }
-            let (nonce, hashes, diff) = match result {
+            let (nonce, hashes, diff, mining_res) = match result {
                 Ok(values) => {
                     debug!(target: LOG_TARGET,
                         "Mining successful: nonce={:?}, hashes={}, difficulty={}",
                         values.0, values.1, values.2
                     );
-                    (values.0, values.1, values.2)
+                    (values.0, values.1, values.2, values.3)
                 },
                 Err(e) => {
                     error!(target: LOG_TARGET, "Mining failed: {}", e);
@@ -920,7 +921,11 @@ fn run_thread(
             }
             debug!(target: LOG_TARGET, "Inside loop nonce {:?}", nonce.clone().is_some());
             if let Some(n) = nonce {
-                job_client.submit(job_id, n);
+                let _res = job_client.submit(other_id, job_id, n, mining_res).inspect_err(|e| {
+                    error!(target: LOG_TARGET, "Error submitting job: {}", e);
+                    eprintln!("Error submitting job: {}", e);
+                })?;
+                // dbg!("here2");
                 break;
             }
             debug!(target: LOG_TARGET, "Inside thread loop break {:?}", num_threads);
@@ -1078,4 +1083,87 @@ fn copy_u64_to_u8(input: Vec<u64>) -> Vec<u8> {
     }
 
     output
+}
+
+#[cfg(test)]
+mod test {
+    use sha3::{Digest, Sha3_256};
+    use tari_common_types::types::FixedHash;
+    use tari_utilities::hex::Hex;
+
+    #[test]
+    fn test_sha_difficulty() {
+        // lp test
+
+        // let mut mining_hash: Vec<u8> =
+        // Hex::from_hex("f068e0ea8f2bcb3ae47cde6a30ec12f2f4d81a2cc55bd56a0abfdd903ff7a86d").unwrap();
+        // f068e0ea8f2bcb3ae47cde6a30ec12f2f4d81a2cc55bd56a0abfdd903ff7a86d
+        let mut mining_hash: Vec<u8> =
+            Hex::from_hex("9eb9ca378167e41fbfac62c4f0c42509beb8115cbdf692d95c2e962face495fd").unwrap();
+        let nonce: Vec<u8> = Hex::from_hex("4e7c132263077f46").unwrap();
+        // let nonce: Vec<u8> = Hex::from_hex("4e7c000000").unwrap();
+        // let nonce: Vec<u8> = Hex::from_hex("bc03000018bee902").unwrap();
+        let nonce: [u8; 8] = nonce.try_into().unwrap();
+        // let nonce = u64::from_be_bytes(nonce);
+        let nonce = u64::from_le_bytes(nonce);
+        // assert_eq!(nonce, 5079787027052067918);
+        // bc03000018bee902
+
+        // mining_hash.reverse();
+        let hash = Sha3_256::new()
+            // .chain_update(nonce.to_le_bytes())
+            .chain_update(nonce.to_le_bytes())
+            .chain_update(mining_hash)
+            .chain_update(vec![1u8])
+            .finalize()
+            .to_vec();
+        let hash = Sha3_256::digest(hash);
+        let hash = Sha3_256::digest(hash);
+        let hash = hash.to_vec();
+        // let difficulty = Difficulty::big_endian_difficulty(&hash)?;
+        assert_eq!(
+            hash.to_hex(),
+            "00000000047f9bd541f8916a6c0d0cab9c673be0f4b0f70bdb4f2e217dd92725".to_string()
+        );
+
+        //             "00000000047f9bd541f8916a6c0d0cab9c673be0f4b0f70bdb4f2e217dd92725".to_string()
+        // 00000000059ab36ca049f8b5f5a51b53571f2408e1aa19eed6488868f1112d61
+    }
+
+    #[test]
+    fn test_sha_difficulty2() {
+        // let mut mining_hash: Vec<u8> =
+        // Hex::from_hex("f068e0ea8f2bcb3ae47cde6a30ec12f2f4d81a2cc55bd56a0abfdd903ff7a86d").unwrap();
+        // f068e0ea8f2bcb3ae47cde6a30ec12f2f4d81a2cc55bd56a0abfdd903ff7a86d
+        let mut mining_hash: Vec<u8> =
+            Hex::from_hex("7d0b4f7dfcae9fbf72114f5b17d84691c7ba5061bb1cfb414964eceaf56d0157").unwrap();
+        // let nonce: Vec<u8> = Hex::from_hex("4e7c132263077f46").unwrap();
+        let nonce: Vec<u8> = Hex::from_hex("a9bde933b0170000").unwrap();
+        // let nonce: Vec<u8> = Hex::from_hex("bc03000018bee902").unwrap();
+        let nonce: [u8; 8] = nonce.try_into().unwrap();
+        // let nonce = u64::from_be_bytes(nonce);
+        let nonce = u64::from_le_bytes(nonce);
+        // assert_eq!(nonce, 5079787027052067918);
+        // bc03000018bee902
+
+        // mining_hash.reverse();
+        let hash = Sha3_256::new()
+            // .chain_update(nonce.to_le_bytes())
+            .chain_update(nonce.to_le_bytes())
+            .chain_update(mining_hash)
+            .chain_update(vec![1u8])
+            .finalize()
+            .to_vec();
+        let hash = Sha3_256::digest(hash);
+        let hash = Sha3_256::digest(hash);
+        let hash = hash.to_vec();
+        // let difficulty = Difficulty::big_endian_difficulty(&hash)?;
+        assert_eq!(
+            hash.to_hex(),
+            "0000000060e258b8e4104f8d407822e68b6c69b75d2d954f59e75035f00def53".to_string()
+        );
+
+        //             "00000000047f9bd541f8916a6c0d0cab9c673be0f4b0f70bdb4f2e217dd92725".to_string()
+        // 00000000059ab36ca049f8b5f5a51b53571f2408e1aa19eed6488868f1112d61
+    }
 }
