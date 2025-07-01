@@ -822,6 +822,10 @@ fn run_thread<T: JobClient>(
             other_id,
             mut nonce_start,
         } = job_client.get_job(thread_index)?;
+        println!(
+            "Job received: job_id: {}, other_id: {}, target_difficulty: {}, inverted_difficulty: {}, nonce_start: {}",
+            job_id, other_id, target_difficulty, inverted_difficulty, nonce_start
+        );
 
         let hash64 = copy_u8_to_u64(mining_hash.to_vec());
         data[0] = 0;
@@ -863,7 +867,12 @@ fn run_thread<T: JobClient>(
                 &context,
                 &data,
                 // inverted_difficulty,
-                (u64::MAX / (target_difficulty)).to_le(),
+                (if target_difficulty == 0 {
+                    u64::MAX
+                } else {
+                    u64::MAX / (target_difficulty)
+                })
+                .to_le(),
                 // target_difficulty,
                 nonce_start,
                 num_iterations,

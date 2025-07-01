@@ -414,7 +414,9 @@ impl NicehashStratumWorker {
                                nonce_start: 0,
                            };
                            if let Ok(job_value) = job_value {
-                               if let Some(res) = job_value.get("result") {
+                            let job_data = job_value.get("result").or(job_value.get("params"));
+
+                               if let Some(res) = job_data {
                                    let id = res.get("id");
                                    job.other_id = id
                                        .unwrap_or(&serde_json::Value::Null)
@@ -475,7 +477,7 @@ impl NicehashStratumWorker {
                                                   },
                                                   StratumRequest::Submit { other_id, job_id, nonce, result, reply} => {
                                                       // Handle submit request
-                                                      println!("Handling submit request");
+                                                      println!("Handling submit request for : {} {}", job_id, other_id);
                                                        let tcp_stream = TcpStream::connect(&self.url)?;
             let mut writer = tcp_stream.try_clone().unwrap();
             let mut reader = BufReader::new(tcp_stream.try_clone().unwrap());
@@ -558,6 +560,13 @@ impl JobClient for NicehashStratumClient {
 
     fn submit(&self, other_id: String, job_id: String, nonce: u64, result: Vec<u8>) -> Result<(), anyhow::Error> {
         let (reply_tx, reply_rx) = oneshot::channel();
+        println!(
+            "Submitting job: other_id: {}, job_id: {}, nonce: {}, result: {}",
+            other_id,
+            job_id,
+            nonce,
+            hex::encode(&result)
+        );
         let res = self.requester.blocking_send(StratumRequest::Submit {
             other_id,
             job_id,
