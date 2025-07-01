@@ -30,7 +30,6 @@ use minotari_app_grpc::{
     tari_rpc::{Block, BlockHeader as grpc_header, NewBlockTemplate, TransactionOutput as GrpcTransactionOutput},
 };
 use multi_engine_wrapper::{EngineType, MultiEngineWrapper};
-use node_client::{create_job_client, Job};
 use num_format::{Locale, ToFormattedString};
 use tari_common::configuration::Network;
 use tari_common_types::{tari_address::TariAddress, types::FixedHash};
@@ -58,7 +57,7 @@ use crate::{
     gpu_engine::GpuEngine,
     gpu_status_file::GpuStatusFile,
     http::{config::Config, server::HttpServer},
-    node_client::ClientType,
+    node_client::{ClientType, Job, JobClient, NicehashStratumWorker},
     tari_coinbase::generate_coinbase,
 };
 
@@ -419,94 +418,12 @@ async fn main_inner() -> Result<(), anyhow::Error> {
         num_devices
     );
 
-    if cli.find_optimal {
-        let mut best_hashrate = 0;
-        let mut best_grid_size = 1;
-        let mut current_grid_size = 32;
-        let mut is_doubling_stage = true;
-        let mut last_grid_size_increase = 0;
-        let mut prev_hashrate = 0;
-
-        while true {
-            let mut config = config.clone();
-            config.single_grid_size = current_grid_size;
-            // config.block_size = ;
-            let mut threads = vec![];
-            let (tx, rx) = tokio::sync::broadcast::channel(100);
-            for i in 0..num_devices {
-                if !devices_to_use.contains(&i) {
-                    continue;
-                }
-                let c = config.clone();
-                let gpu = multi_engine_wrapper.clone();
-                let x = tx.clone();
-
-                let signal2 = signal.clone();
-                threads.push(thread::spawn(move || {
-                    run_thread(gpu, num_devices as u64, i as u32, c, true, x, signal2)
-                }));
-            }
-            let thread_len = threads.len();
-            let mut thread_hashrate = Vec::with_capacity(thread_len);
-            for t in threads {
-                match t.join() {
-                    Ok(res) => match res {
-                        Ok(hashrate) => {
-                            info!(target: LOG_TARGET, "Thread join succeeded: {}", hashrate.to_formatted_string(&Locale::en));
-                            thread_hashrate.push(hashrate);
-                        },
-                        Err(err) => {
-                            eprintln!("Thread join succeeded but result failed: {:?}", err);
-                            error!(target: LOG_TARGET, "Thread join succeeded but result failed: {:?}", err);
-                        },
-                    },
-                    Err(err) => {
-                        eprintln!("Thread join failed: {:?}", err);
-                        error!(target: LOG_TARGET, "Thread join failed: {:?}", err);
-                    },
-                }
-            }
-            let total_hashrate: u64 = thread_hashrate.iter().sum();
-            if total_hashrate > best_hashrate {
-                best_hashrate = total_hashrate;
-                best_grid_size = current_grid_size;
-                // best_grid_size = config.single_grid_size;
-                // best_block_size = config.block_size;
-                println!(
-                    "Best hashrate: {} grid_size: {}, current_grid: {} block_size: {} Prev Hash {}",
-                    best_hashrate, best_grid_size, current_grid_size, config.block_size, prev_hashrate
-                );
-            }
-            // if total_hashrate < prev_hashrate {
-            //     println!("total decreased, breaking");
-            //     break;
-            // }
-            if is_doubling_stage {
-                if total_hashrate > prev_hashrate {
-                    last_grid_size_increase = current_grid_size;
-                    current_grid_size = current_grid_size * 2;
-                } else {
-                    is_doubling_stage = false;
-                    last_grid_size_increase = last_grid_size_increase / 2;
-                    current_grid_size = current_grid_size.saturating_sub(last_grid_size_increase);
-                }
-            } else {
-                // Bisecting stage
-                if last_grid_size_increase < 2 {
-                    break;
-                }
-                if total_hashrate > prev_hashrate {
-                    last_grid_size_increase = last_grid_size_increase / 2;
-                    current_grid_size += last_grid_size_increase;
-                } else {
-                    last_grid_size_increase = last_grid_size_increase / 2;
-                    current_grid_size = current_grid_size.saturating_sub(last_grid_size_increase);
-                }
-            }
-            prev_hashrate = total_hashrate;
-        }
-        return Ok(());
-    }
+    // TODO: put back find optimal
+    // if cli.find_optimal {
+    //     if let Some(value) = find_optimal(&multi_engine_wrapper, &signal, &config, num_devices, &devices_to_use) {
+    //         return value;
+    //     }
+    // }
 
     let (stats_tx, stats_rx) = tokio::sync::broadcast::channel(100);
     if config.http_server_enabled {
@@ -535,14 +452,25 @@ async fn main_inner() -> Result<(), anyhow::Error> {
 
     info!(target: LOG_TARGET, "Starting template height watcher");
 
-    if num_devices > 0 && !benchmark && !config.use_stratum {
-        let c = config.clone();
-        let s = signal.clone();
-        threads.push(thread::spawn(move || {
-            let runtime = Runtime::new().unwrap();
-            runtime.block_on(async { run_template_height_watcher(c, s).await })
-        }));
-    }
+    // if num_devices > 0 && !benchmark && !config.use_stratum {
+    //     let c = config.clone();
+    //     let s = signal.clone();
+    //     threads.push(thread::spawn(move || {
+    //         let runtime = Runtime::new().unwrap();
+    //         runtime.block_on(async { run_template_height_watcher(c, s).await })
+    //     }));
+    // }
+    let worker = NicehashStratumWorker::new(
+        config.tari_node_url.clone(),
+        config.tari_address.clone(),
+        "SRBMiner-MULTI/2.8.7".to_string(),
+    );
+    let job_client = worker.create_client();
+    let shutdown_signal = shutdown.to_signal();
+    threads.push(thread::spawn(move || {
+        let rt = Runtime::new().unwrap();
+        rt.block_on(worker.run(shutdown_signal))
+    }));
 
     info!(target: LOG_TARGET, "Starting mining threads: {}", devices_to_use.len());
 
@@ -554,8 +482,9 @@ async fn main_inner() -> Result<(), anyhow::Error> {
             let gpu = multi_engine_wrapper.clone();
             let curr_stats_tx = stats_tx.clone();
             let s = signal.clone();
+            let jc = job_client.clone();
             threads.push(thread::spawn(move || {
-                run_thread(gpu, num_devices as u64, i as u32, c, benchmark, curr_stats_tx, s)
+                run_thread(gpu, num_devices as u64, i as u32, c, benchmark, curr_stats_tx, jc, s)
             }));
         }
     }
@@ -606,136 +535,238 @@ async fn main_inner() -> Result<(), anyhow::Error> {
     Ok(())
 }
 
-async fn run_template_height_watcher(config: ConfigFile, shutdown: ShutdownSignal) -> Result<u64, anyhow::Error> {
-    let client_type = if config.p2pool_enabled {
-        ClientType::P2Pool(TariAddress::from_str(config.tari_address.as_str()).unwrap())
-    } else {
-        ClientType::BaseNode
-    };
-
-    let mut node_client =
-        node_client::create_client(client_type, &config.tari_node_url, config.coinbase_extra.clone()).await?;
-
-    let mut curr_node_height = 0;
-    let mut curr_p2pool_height = 0;
-    let mut curr_hash = vec![];
-    let mut curr_p2pool_hash = vec![];
-    let mut last_template_time = Instant::now();
-    let mut num_failures = 0;
-    // let mut curr_block_template = None;
-
-    let timeout_dur = std::time::Duration::from_secs(config.template_timeout_secs);
-    loop {
-        // Sleep first otherwise we call continue a lot
-        sleep(Duration::from_secs(config.height_check_secs)).await;
-        if num_failures > config.max_template_failures as u64 {
-            error!(target: LOG_TARGET, "Max template failures reached. Exiting.");
-            // This is a temporary hack to stop mining
-            return Err(anyhow!("Max template failures reached"));
-        }
-        let mut must_refresh = false;
-        if shutdown.is_triggered() {
-            break;
-        }
-
-        // let current_data = {
-        //     let d = get_block_template_cache().read().await;
-        //     d.map(|d| (d.header.height, d.header.prev_hash, d.p2pool_height, d.p2pool_prev_hash))
-        // };
-
-        let height_data = match tokio::time::timeout(timeout_dur, node_client.get_height()).await {
-            Ok(Ok(height_data)) => height_data,
-            Ok(Err(e)) => {
-                error!(target: LOG_TARGET, "Error getting height: {:?}", e);
-                num_failures += 1;
+fn find_optimal<T: JobClient>(
+    multi_engine_wrapper: &MultiEngineWrapper,
+    signal: &ShutdownSignal,
+    config: &ConfigFile,
+    num_devices: u32,
+    client: T,
+    devices_to_use: &Vec<u32>,
+) -> Option<Result<(), anyhow::Error>> {
+    let mut best_hashrate = 0;
+    let mut best_grid_size = 1;
+    let mut current_grid_size = 32;
+    let mut is_doubling_stage = true;
+    let mut last_grid_size_increase = 0;
+    let mut prev_hashrate = 0;
+    while true {
+        let mut config = config.clone();
+        config.single_grid_size = current_grid_size;
+        // config.block_size = ;
+        let mut threads = vec![];
+        let (tx, rx) = tokio::sync::broadcast::channel(100);
+        for i in 0..num_devices {
+            if !devices_to_use.contains(&i) {
                 continue;
-            },
-            Err(e) => {
-                error!(target: LOG_TARGET, "Timeout getting height: {:?}", e);
-                num_failures += 1;
-                continue;
-            },
-        };
-        num_failures = 0;
-        if height_data.height > curr_node_height || height_data.tip_hash != curr_hash {
-            info!(target: LOG_TARGET, "Tari chain changed. Dumping block template. New height:{}, old height:{}.", height_data.height, curr_node_height);
-            must_refresh = true;
-            // clear_block_template_cache().await;
+            }
+            let c = config.clone();
+            let gpu = multi_engine_wrapper.clone();
+            let x = tx.clone();
+
+            let signal2 = signal.clone();
+            let client2 = client.clone();
+            threads.push(thread::spawn(move || {
+                run_thread(gpu, num_devices as u64, i as u32, c, true, x, client2, signal2)
+            }));
         }
-        if height_data.p2pool_height > curr_p2pool_height || curr_p2pool_hash != height_data.p2pool_tip_hash {
-            info!(target: LOG_TARGET, "P2Pool chain changed. Dumping block template. New height:{}, old height:{}.", height_data.p2pool_height, curr_p2pool_height);
-            must_refresh = true;
-            // clear_block_template_cache().await;
-        }
-
-        if last_template_time.elapsed() > Duration::from_secs(config.template_refresh_secs) {
-            info!(target: LOG_TARGET, "Template refresh time elapsed. Dumping block template.");
-            must_refresh = true;
-        }
-
-        curr_node_height = height_data.height;
-        curr_hash = height_data.tip_hash;
-        curr_p2pool_height = height_data.p2pool_height;
-        curr_p2pool_hash = height_data.p2pool_tip_hash;
-
-        println!(
-            "Current height: {}, P2Pool height: {} time: {}s",
-            curr_node_height,
-            curr_p2pool_height,
-            last_template_time.elapsed().as_secs()
-        );
-
-        if must_refresh {
-            println!("Refreshing block template");
-            let template = match tokio::time::timeout(
-                std::time::Duration::from_secs(config.template_timeout_secs),
-                get_template_from_client(&mut node_client, config.clone()),
-            )
-            .await
-            {
-                Ok(Ok(template)) => template,
-                Ok(Err(e)) => {
-                    error!(target: LOG_TARGET, "Error getting block template: {}", e);
-                    num_failures += 1;
-                    continue;
+        let thread_len = threads.len();
+        let mut thread_hashrate = Vec::with_capacity(thread_len);
+        for t in threads {
+            match t.join() {
+                Ok(res) => match res {
+                    Ok(hashrate) => {
+                        info!(target: LOG_TARGET, "Thread join succeeded: {}", hashrate.to_formatted_string(&Locale::en));
+                        thread_hashrate.push(hashrate);
+                    },
+                    Err(err) => {
+                        eprintln!("Thread join succeeded but result failed: {:?}", err);
+                        error!(target: LOG_TARGET, "Thread join succeeded but result failed: {:?}", err);
+                    },
                 },
-                Err(e) => {
-                    error!(target: LOG_TARGET, "Timeout getting block template: {}", e);
-                    num_failures += 1;
-                    continue;
+                Err(err) => {
+                    eprintln!("Thread join failed: {:?}", err);
+                    error!(target: LOG_TARGET, "Thread join failed: {:?}", err);
                 },
-            };
-            last_template_time = Instant::now();
-            // clear_block_template_cache().await;
-            replace_block_template_cache(template).await;
-            println!("Block template refreshed");
+            }
         }
-
-        // let height = template
-        //     .new_block_template
-        //     .as_ref()
-        //     .and_then(|b| b.header.as_ref())
-        //     .map(|h| h.height)
-        //     .unwrap_or(0);
-        // if height > curr_height.load(Ordering::SeqCst) {
-        //     curr_height.store(height, Ordering::SeqCst);
+        let total_hashrate: u64 = thread_hashrate.iter().sum();
+        if total_hashrate > best_hashrate {
+            best_hashrate = total_hashrate;
+            best_grid_size = current_grid_size;
+            // best_grid_size = config.single_grid_size;
+            // best_block_size = config.block_size;
+            println!(
+                "Best hashrate: {} grid_size: {}, current_grid: {} block_size: {} Prev Hash {}",
+                best_hashrate, best_grid_size, current_grid_size, config.block_size, prev_hashrate
+            );
+        }
+        // if total_hashrate < prev_hashrate {
+        //     println!("total decreased, breaking");
+        //     break;
         // }
+        if is_doubling_stage {
+            if total_hashrate > prev_hashrate {
+                last_grid_size_increase = current_grid_size;
+                current_grid_size = current_grid_size * 2;
+            } else {
+                is_doubling_stage = false;
+                last_grid_size_increase = last_grid_size_increase / 2;
+                current_grid_size = current_grid_size.saturating_sub(last_grid_size_increase);
+            }
+        } else {
+            // Bisecting stage
+            if last_grid_size_increase < 2 {
+                break;
+            }
+            if total_hashrate > prev_hashrate {
+                last_grid_size_increase = last_grid_size_increase / 2;
+                current_grid_size += last_grid_size_increase;
+            } else {
+                last_grid_size_increase = last_grid_size_increase / 2;
+                current_grid_size = current_grid_size.saturating_sub(last_grid_size_increase);
+            }
+        }
+        prev_hashrate = total_hashrate;
     }
-    Ok(0)
+    return Some(Ok(()));
+
+    None
 }
 
-fn run_thread(
+// async fn run_template_height_watcher(config: ConfigFile, shutdown: ShutdownSignal) -> Result<u64, anyhow::Error> {
+//     // let client_type = if config.p2pool_enabled {
+//     // ClientType::P2Pool(TariAddress::from_str(config.tari_address.as_str()).unwrap())
+// } else {
+// ClientType::BaseNode
+// };
+
+// if config.use_stratum {
+
+// }
+// let mut node_client =
+// node_client::create_client(client_type, &config.tari_node_url, config.coinbase_extra.clone()).await?;
+
+//     let mut curr_node_height = 0;
+//     let mut curr_p2pool_height = 0;
+//     let mut curr_hash = vec![];
+//     let mut curr_p2pool_hash = vec![];
+//     let mut last_template_time = Instant::now();
+//     let mut num_failures = 0;
+//     // let mut curr_block_template = None;
+
+//     let timeout_dur = std::time::Duration::from_secs(config.template_timeout_secs);
+//     loop {
+//         // Sleep first otherwise we call continue a lot
+//         sleep(Duration::from_secs(config.height_check_secs)).await;
+//         if num_failures > config.max_template_failures as u64 {
+//             error!(target: LOG_TARGET, "Max template failures reached. Exiting.");
+//             // This is a temporary hack to stop mining
+//             return Err(anyhow!("Max template failures reached"));
+//         }
+//         let mut must_refresh = false;
+//         if shutdown.is_triggered() {
+//             break;
+//         }
+
+//         // let current_data = {
+//         //     let d = get_block_template_cache().read().await;
+//         //     d.map(|d| (d.header.height, d.header.prev_hash, d.p2pool_height, d.p2pool_prev_hash))
+//         // };
+
+//         let height_data = match tokio::time::timeout(timeout_dur, node_client.get_height()).await {
+//             Ok(Ok(height_data)) => height_data,
+//             Ok(Err(e)) => {
+//                 error!(target: LOG_TARGET, "Error getting height: {:?}", e);
+//                 num_failures += 1;
+//                 continue;
+//             },
+//             Err(e) => {
+//                 error!(target: LOG_TARGET, "Timeout getting height: {:?}", e);
+//                 num_failures += 1;
+//                 continue;
+//             },
+//         };
+//         num_failures = 0;
+//         if height_data.height > curr_node_height || height_data.tip_hash != curr_hash {
+//             info!(target: LOG_TARGET, "Tari chain changed. Dumping block template. New height:{}, old height:{}.",
+// height_data.height, curr_node_height);             must_refresh = true;
+//             // clear_block_template_cache().await;
+//         }
+//         if height_data.p2pool_height > curr_p2pool_height || curr_p2pool_hash != height_data.p2pool_tip_hash {
+//             info!(target: LOG_TARGET, "P2Pool chain changed. Dumping block template. New height:{}, old height:{}.",
+// height_data.p2pool_height, curr_p2pool_height);             must_refresh = true;
+//             // clear_block_template_cache().await;
+//         }
+
+//         if last_template_time.elapsed() > Duration::from_secs(config.template_refresh_secs) {
+//             info!(target: LOG_TARGET, "Template refresh time elapsed. Dumping block template.");
+//             must_refresh = true;
+//         }
+
+//         curr_node_height = height_data.height;
+//         curr_hash = height_data.tip_hash;
+//         curr_p2pool_height = height_data.p2pool_height;
+//         curr_p2pool_hash = height_data.p2pool_tip_hash;
+
+//         println!(
+//             "Current height: {}, P2Pool height: {} time: {}s",
+//             curr_node_height,
+//             curr_p2pool_height,
+//             last_template_time.elapsed().as_secs()
+//         );
+
+//         if must_refresh {
+//             println!("Refreshing block template");
+//             let template = match tokio::time::timeout(
+//                 std::time::Duration::from_secs(config.template_timeout_secs),
+//                 get_template_from_client(&mut node_client, config.clone()),
+//             )
+//             .await
+//             {
+//                 Ok(Ok(template)) => template,
+//                 Ok(Err(e)) => {
+//                     error!(target: LOG_TARGET, "Error getting block template: {}", e);
+//                     num_failures += 1;
+//                     continue;
+//                 },
+//                 Err(e) => {
+//                     error!(target: LOG_TARGET, "Timeout getting block template: {}", e);
+//                     num_failures += 1;
+//                     continue;
+//                 },
+//             };
+//             last_template_time = Instant::now();
+//             // clear_block_template_cache().await;
+//             replace_block_template_cache(template).await;
+//             println!("Block template refreshed");
+//         }
+
+//         // let height = template
+//         //     .new_block_template
+//         //     .as_ref()
+//         //     .and_then(|b| b.header.as_ref())
+//         //     .map(|h| h.height)
+//         //     .unwrap_or(0);
+//         // if height > curr_height.load(Ordering::SeqCst) {
+//         //     curr_height.store(height, Ordering::SeqCst);
+//         // }
+//     }
+//     Ok(0)
+// }
+
+fn run_thread<T: JobClient>(
     gpu_engine: MultiEngineWrapper,
     num_threads: u64,
     thread_index: u32,
     config: ConfigFile,
     benchmark: bool,
     stats_tx: Sender<HashrateSample>,
+    job_client: T,
     shutdown: ShutdownSignal,
 ) -> Result<u64, anyhow::Error> {
     let fixed_num_iterations = config.iterations_per_cycle;
     let tari_node_url = config.tari_node_url.clone();
-    let job_client = create_job_client(&config)?;
+    // let job_client = create_job_client(&config)?;
 
     let mut rounds = 0;
     let running_time = Instant::now();
@@ -790,7 +821,7 @@ fn run_thread(
             job_id,
             other_id,
             mut nonce_start,
-        } = job_client.get_job()?;
+        } = job_client.get_job(thread_index)?;
 
         let hash64 = copy_u8_to_u64(mining_hash.to_vec());
         data[0] = 0;

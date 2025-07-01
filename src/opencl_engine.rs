@@ -285,7 +285,7 @@ impl EngineImpl for OpenClEngine {
             return Ok((
                 None,
                 grid_size * block_size * num_iterations,
-                if output[1] == 0 { 0 } else {u64::MAX / output[1]},
+                if output[1] == 0 { 0 } else { u64::MAX / output[1] },
                 vec![],
             ));
         }
