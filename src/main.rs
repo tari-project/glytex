@@ -28,6 +28,7 @@ use minotari_app_grpc::{
     conversions::block,
     tari_rpc::{Block, BlockHeader as grpc_header, NewBlockTemplate, TransactionOutput as GrpcTransactionOutput},
 };
+use minotari_app_grpc::conversions::transaction_output::grpc_output_with_payref;
 use multi_engine_wrapper::{EngineType, MultiEngineWrapper};
 use num_format::{Locale, ToFormattedString};
 use tari_common::configuration::Network;
@@ -1042,7 +1043,7 @@ async fn get_template_from_client(
     .await?;
     debug!(target: LOG_TARGET, "Getting block template difficulty {:?}", miner_data.target_difficulty.clone());
     let body = block_template.body.as_mut().expect("no block body");
-    let grpc_output = GrpcTransactionOutput::try_from(coinbase_output.clone()).map_err(|s| anyhow!(s))?;
+    let grpc_output = grpc_output_with_payref(coinbase_output, None).map_err(|s| anyhow!(s))?;
     body.outputs.push(grpc_output);
     body.kernels.push(coinbase_kernel.into());
     let target_difficulty = miner_data.target_difficulty;
