@@ -11,7 +11,7 @@ use tari_core::{
     transactions::{
         tari_amount::MicroMinotari,
         transaction_components::{
-            encrypted_data::PaymentId,
+            payment_id::PaymentId,
             CoinBaseExtra,
             RangeProofType,
             Transaction,
