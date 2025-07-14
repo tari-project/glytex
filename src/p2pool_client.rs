@@ -33,8 +33,8 @@ impl P2poolClientWrapper {
         wallet_payment_address: TariAddress,
         coinbase_extra: String,
     ) -> Result<Self, anyhow::Error> {
-        println!("Connecting to {}", url);
-        info!(target: LOG_TARGET, "P2poolClientWrapper: connecting to {}", url);
+        println!("Connecting to {url}");
+        info!(target: LOG_TARGET, "P2poolClientWrapper: connecting to {url}");
         let mut client: Option<ShaP2PoolClient<Channel>> = None;
         while client.is_none() {
             match ShaP2PoolClient::connect(url.to_string()).await {
@@ -48,7 +48,7 @@ impl P2poolClientWrapper {
                 },
                 Err(error) => {
                     println!("Failed to connect to p2pool node: {error:?}");
-                    error!(target: LOG_TARGET, "P2poolClientWrapper: failed to connect to p2pool node: {:?}", error);
+                    error!(target: LOG_TARGET, "P2poolClientWrapper: failed to connect to p2pool node: {error:?}");
                     tokio::time::sleep(Duration::from_secs(5)).await;
                 },
             }

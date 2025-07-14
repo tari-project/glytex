@@ -170,7 +170,7 @@ impl StatsCollector {
                     entry.push_back(sample);
                         },
                         Err(e) => {
-                            error!(target: LOG_TARGET, "Error receiving hashrate sample: {:?}", e);
+                            error!(target: LOG_TARGET, "Error receiving hashrate sample: {e:?}");
                             break;
                         }
                     }

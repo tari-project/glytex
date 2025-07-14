@@ -84,16 +84,16 @@ impl MultiEngineWrapper {
         let _ = match GpuStatusFile::load(&status_file_path) {
             Ok(_) => {
                 if let Err(err) = status_file.save(&status_file_path) {
-                    warn!(target: LOG_TARGET,"Error saving gpu status: {}", err);
+                    warn!(target: LOG_TARGET,"Error saving gpu status: {err}");
                 }
                 status_file
             },
             Err(_) => {
-                if let Err(err) = create_dir_all(&status_file_path.parent().expect("no parent")) {
-                    warn!(target: LOG_TARGET, "Error creating directory: {}", err);
+                if let Err(err) = create_dir_all(status_file_path.parent().expect("no parent")) {
+                    warn!(target: LOG_TARGET, "Error creating directory: {err}");
                 }
                 if let Err(err) = status_file.save(&status_file_path) {
-                    warn!(target: LOG_TARGET,"Error saving gpu status: {}", err);
+                    warn!(target: LOG_TARGET,"Error saving gpu status: {err}");
                 }
                 status_file
             },

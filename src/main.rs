@@ -124,12 +124,12 @@ async fn main() {
             "Unknown panic message".to_string()
         };
 
-        error!(target: "tari::p2pool::main", "Panic occurred at {}: {}", location, message);
-        eprintln!("Panic at {}: {}", location, message);
+        error!(target: "tari::p2pool::main", "Panic occurred at {location}: {message}");
+        eprintln!("Panic at {location}: {message}");
 
         // Optionally, write a custom message directly to the file
         let mut file = File::create("panic.log").unwrap();
-        file.write_all(format!("Panic at {}: {}", location, message).as_bytes())
+        file.write_all(format!("Panic at {location}: {message}").as_bytes())
             .unwrap();
         process::exit(500);
     }));
@@ -140,7 +140,7 @@ async fn main() {
             std::process::exit(0);
         },
         Err(err) => {
-            error!(target: LOG_TARGET, "Gpu miner startup process error: {}", err);
+            error!(target: LOG_TARGET, "Gpu miner startup process error: {err}");
             std::process::exit(1);
         },
     }
@@ -302,7 +302,7 @@ async fn main_inner() -> Result<(), anyhow::Error> {
             config
         },
         Err(err) => {
-            eprintln!("Error loading config file: {}. Creating new one", err);
+            eprintln!("Error loading config file: {err}. Creating new one");
             let default = ConfigFile::default();
             let path = cli.config.unwrap_or_else(|| {
                 let mut path = current_dir().expect("no current directory");
@@ -335,7 +335,7 @@ async fn main_inner() -> Result<(), anyhow::Error> {
             }
         },
         Err(err) => {
-            eprintln!("Error loading gpu status file: {}. Detecting...", err);
+            eprintln!("Error loading gpu status file: {err}. Detecting...");
             // Run detect.
             detect_and_return_status_file(&mut multi_engine_wrapper, &gpu_status_path)
         },
@@ -447,13 +447,13 @@ async fn main_inner() -> Result<(), anyhow::Error> {
                             thread_hashrate.push(hashrate);
                         },
                         Err(err) => {
-                            eprintln!("Thread join succeeded but result failed: {:?}", err);
-                            error!(target: LOG_TARGET, "Thread join succeeded but result failed: {:?}", err);
+                            eprintln!("Thread join succeeded but result failed: {err:?}");
+                            error!(target: LOG_TARGET, "Thread join succeeded but result failed: {err:?}");
                         },
                     },
                     Err(err) => {
-                        eprintln!("Thread join failed: {:?}", err);
-                        error!(target: LOG_TARGET, "Thread join failed: {:?}", err);
+                        eprintln!("Thread join failed: {err:?}");
+                        error!(target: LOG_TARGET, "Thread join failed: {err:?}");
                     },
                 }
             }
@@ -515,7 +515,7 @@ async fn main_inner() -> Result<(), anyhow::Error> {
         tokio::spawn(async move {
             if let Err(error) = http_server.start().await {
                 println!("Failed to start HTTP server: {error:?}");
-                error!(target: LOG_TARGET, "Failed to start HTTP server: {:?}", error);
+                error!(target: LOG_TARGET, "Failed to start HTTP server: {error:?}");
             } else {
                 info!(target: LOG_TARGET, "Success to start HTTP server");
             }
@@ -575,11 +575,11 @@ async fn main_inner() -> Result<(), anyhow::Error> {
                     thread_hashrate.push(hashrate);
                 },
                 Err(err) => {
-                    error!(target: LOG_TARGET, "Thread join succeeded but result failed: {:?}", err);
+                    error!(target: LOG_TARGET, "Thread join succeeded but result failed: {err:?}");
                 },
             },
             Err(err) => {
-                error!(target: LOG_TARGET, "Thread join failed: {:?}", err);
+                error!(target: LOG_TARGET, "Thread join failed: {err:?}");
             },
         }
     }
@@ -637,12 +637,12 @@ async fn run_template_height_watcher(config: ConfigFile, shutdown: ShutdownSigna
         let height_data = match tokio::time::timeout(timeout_dur, node_client.get_height()).await {
             Ok(Ok(height_data)) => height_data,
             Ok(Err(e)) => {
-                error!(target: LOG_TARGET, "Error getting height: {:?}", e);
+                error!(target: LOG_TARGET, "Error getting height: {e:?}");
                 num_failures += 1;
                 continue;
             },
             Err(e) => {
-                error!(target: LOG_TARGET, "Timeout getting height: {:?}", e);
+                error!(target: LOG_TARGET, "Timeout getting height: {e:?}");
                 num_failures += 1;
                 continue;
             },
@@ -686,12 +686,12 @@ async fn run_template_height_watcher(config: ConfigFile, shutdown: ShutdownSigna
             {
                 Ok(Ok(template)) => template,
                 Ok(Err(e)) => {
-                    error!(target: LOG_TARGET, "Error getting block template: {}", e);
+                    error!(target: LOG_TARGET, "Error getting block template: {e}");
                     num_failures += 1;
                     continue;
                 },
                 Err(e) => {
-                    error!(target: LOG_TARGET, "Timeout getting block template: {}", e);
+                    error!(target: LOG_TARGET, "Timeout getting block template: {e}");
                     num_failures += 1;
                     continue;
                 },
@@ -771,7 +771,7 @@ fn run_thread(
 
     let mut num_iterations = 1;
     if let Some(fixed_num_iterations) = fixed_num_iterations {
-        info!(target: LOG_TARGET, "Using fixed num iterations: {}", fixed_num_iterations);
+        info!(target: LOG_TARGET, "Using fixed num iterations: {fixed_num_iterations}");
         num_iterations = fixed_num_iterations;
     }
     loop {
@@ -869,9 +869,9 @@ fn run_thread(
                     (values.0, values.1, values.2)
                 },
                 Err(e) => {
-                    error!(target: LOG_TARGET, "Mining failed: {}", e);
-                    eprintln!("Mining failed: {}", e);
-                    return Err(e.into());
+                    error!(target: LOG_TARGET, "Mining failed: {e}");
+                    eprintln!("Mining failed: {e}");
+                    return Err(e);
                 },
             };
             if let Some(ref n) = nonce {
@@ -934,12 +934,12 @@ fn run_thread(
                     },
                     Err(e) => {
                         // stats_store.inc_rejected_blocks();
-                        println!("Error submitting block: {:?}", e);
+                        println!("Error submitting block: {e:?}");
                     },
                 }
                 break;
             }
-            debug!(target: LOG_TARGET, "Inside thread loop break {:?}", num_threads);
+            debug!(target: LOG_TARGET, "Inside thread loop break {num_threads:?}");
             // break;
         }
     }

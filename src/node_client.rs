@@ -27,8 +27,8 @@ pub(crate) struct BaseNodeClientWrapper {
 
 impl BaseNodeClientWrapper {
     pub async fn connect(url: &str) -> Result<Self, anyhow::Error> {
-        println!("Connecting to {}", url);
-        info!(target: LOG_TARGET, "Connecting to {}", url);
+        println!("Connecting to {url}");
+        info!(target: LOG_TARGET, "Connecting to {url}");
         let mut client: Option<BaseNodeClient<Channel>> = None;
         while client.is_none() {
             match BaseNodeClient::connect(url.to_string()).await {
@@ -41,7 +41,7 @@ impl BaseNodeClientWrapper {
                     )
                 },
                 Err(error) => {
-                    error!(target: LOG_TARGET,"Failed to connect to base node: {:?}", error);
+                    error!(target: LOG_TARGET,"Failed to connect to base node: {error:?}");
                     println!("Failed to connect to base node: {error:?}");
                     tokio::time::sleep(Duration::from_secs(5)).await;
                 },
@@ -128,7 +128,7 @@ pub(crate) async fn create_client(
     url: &str,
     coinbase_extra: String,
 ) -> Result<Client, anyhow::Error> {
-    info!(target: LOG_TARGET, "Creating node client: {}", url);
+    info!(target: LOG_TARGET, "Creating node client: {url}");
     Ok(match client_type {
         ClientType::BaseNode => Client::BaseNode(BaseNodeClientWrapper::connect(url).await?),
         ClientType::Benchmark => Client::Benchmark(BenchmarkNodeClient {}),

@@ -16,7 +16,7 @@ pub struct Stats {
 
 pub async fn handle_get_stats(State(state): State<AppState>) -> Result<Json<Stats>, StatusCode> {
     let hashrate = state.stats_client.get_hashrate().await.map_err(|e| {
-        log::error!("Failed to get hashrate: {:?}", e);
+        log::error!("Failed to get hashrate: {e:?}");
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
     let stats = Stats {

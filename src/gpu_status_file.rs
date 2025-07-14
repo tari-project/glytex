@@ -76,7 +76,7 @@ impl GpuStatusFile {
             Ok(file) => gpu_devices
                 .into_iter()
                 .map(|device| {
-                    let device_index = device.device_index.clone();
+                    let device_index = device.device_index;
                     match file.gpu_devices.iter().find(|d| d.device_index == device_index) {
                         Some(existing_device) => {
                             let mut resolved_device = device.clone();
@@ -88,7 +88,7 @@ impl GpuStatusFile {
                 })
                 .collect(),
             Err(e) => {
-                warn!("Could not load GPU status file: {}. Using detected devices", e);
+                warn!("Could not load GPU status file: {e}. Using detected devices");
                 gpu_devices
             },
         }
