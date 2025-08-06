@@ -187,6 +187,10 @@ struct Cli {
     #[arg(long)]
     p2pool_enabled: bool,
 
+    // Pool enabled, will override p2pool being enabled
+    #[arg(long)]
+    pool_enabled: bool,
+
     /// Enable/disable http server
     ///
     /// It exposes health-check, version and stats endpoints
@@ -350,6 +354,9 @@ async fn main_inner() -> Result<(), anyhow::Error> {
     }
     if cli.p2pool_enabled {
         config.p2pool_enabled = true;
+    }
+    if cli.pool_enabled {
+        config.pool_enabled = true;
     }
     if let Some(enabled) = cli.http_server_enabled {
         config.http_server_enabled = enabled;
@@ -598,8 +605,36 @@ async fn main_inner() -> Result<(), anyhow::Error> {
     Ok(())
 }
 
+async fn force_reload_template(config: ConfigFile) {
+    if !config.pool_enabled {
+        return;
+    }
+    let client_type = ClientType::P2Pool(TariAddress::from_str(config.tari_address.as_str()).unwrap());
+    let mut node_client =
+        node_client::create_client(client_type, &config.tari_node_url, config.coinbase_extra.clone()).await.unwrap();
+    println!("Refreshing block template");
+    let template = match tokio::time::timeout(
+        std::time::Duration::from_secs(config.template_timeout_secs),
+        get_template_from_client(&mut node_client, config.clone()),
+    )
+        .await
+    {
+        Ok(Ok(template)) => template,
+        Ok(Err(e)) => {
+            error!(target: LOG_TARGET, "Error getting block template: {}", e);
+            return;
+        },
+        Err(e) => {
+            error!(target: LOG_TARGET, "Timeout getting block template: {}", e);
+            return;
+        },
+    };
+    replace_block_template_cache(template).await;
+    println!("Block template refreshed");
+}
+
 async fn run_template_height_watcher(config: ConfigFile, shutdown: ShutdownSignal) -> Result<u64, anyhow::Error> {
-    let client_type = if config.p2pool_enabled {
+    let client_type = if config.p2pool_enabled || config.pool_enabled {
         ClientType::P2Pool(TariAddress::from_str(config.tari_address.as_str()).unwrap())
     } else {
         ClientType::BaseNode
@@ -730,7 +765,7 @@ fn run_thread(
     let runtime = Runtime::new()?;
     let client_type = if benchmark {
         ClientType::Benchmark
-    } else if config.p2pool_enabled {
+    } else if config.p2pool_enabled || config.pool_enabled {
         ClientType::P2Pool(TariAddress::from_str(config.tari_address.as_str())?)
     } else {
         ClientType::BaseNode
@@ -923,6 +958,7 @@ fn run_thread(
                 let clone_client = node_client.clone();
                 match runtime.block_on(async {
                     let mut client = clone_client.write().await;
+                    force_reload_template(clone_config).await;
                     tokio::time::timeout(
                         std::time::Duration::from_secs(config.template_timeout_secs),
                         client.submit_block(mined_block),
@@ -1011,6 +1047,46 @@ async fn get_template_from_client(
                 .as_ref()
                 .map(|m| m.target_difficulty)
                 .unwrap_or(block_result.target_difficulty),
+            block,
+            header,
+            mining_hash,
+        });
+    }
+    if config.pool_enabled {
+        debug!(target: LOG_TARGET, "pool enabled");
+        let block_result = tokio::time::timeout(
+            std::time::Duration::from_secs(config.template_timeout_secs),
+            node_client.get_new_block(NewBlockTemplate::default()),
+        )
+            .await??;
+        // dbg!(&block_result);
+        let block = block_result.result.block.unwrap();
+        let mut header: BlockHeader = block
+            .clone()
+            .header
+            .unwrap()
+            .try_into()
+            .map_err(|s: String| anyhow!(s))?;
+        let mining_hash = header.mining_hash().clone();
+        info!(target: LOG_TARGET,
+            "block result target difficulty: {}, block timestamp: {}, mining_hash: {}",
+            block_result.target_difficulty.to_string(),
+            block.clone().header.unwrap().timestamp.to_string(),
+            header.mining_hash().clone().to_string()
+        );
+        println!(
+            "New template, difficulty: {}, minerdata {}",
+            block_result.target_difficulty,
+            block_result
+                .result
+                .miner_data
+                .as_ref()
+                .map(|m| m.target_difficulty)
+                .unwrap_or_default()
+        );
+        // return Ok(());
+        return Ok(BlockTemplateData {
+            target_difficulty: block_result.target_difficulty,
             block,
             header,
             mining_hash,
